@@ -1,0 +1,14 @@
+{
+  "name": "catv-network-webapp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "현장 스마트폰용 CATV 전송망 통합 조회 웹사이트",
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check app.js && node --check server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
