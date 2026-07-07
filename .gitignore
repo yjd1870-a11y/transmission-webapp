@@ -1,0 +1,8 @@
+node_modules/
+tmp/
+.agents/
+tools/portable-git/
+tools/gh-cli/
+.server.stdout.log
+.server.stderr.log
+*.log
