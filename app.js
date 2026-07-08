@@ -2141,7 +2141,7 @@ function drawingAnchorBounds(anchor, metrics) {
 function drawingEffectiveXfrm(node, isGroup = false, anchorBounds = null) {
   const xfrm = drawingXfrm(node, isGroup);
   if (!xfrm) return null;
-  if (isGroup && anchorBounds) {
+  if (anchorBounds) {
     return {
       ...xfrm,
       x: anchorBounds.x,
@@ -2587,7 +2587,7 @@ function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
     return `<g transform="${drawingSvgMatrixAttribute(drawingSvgGroupMatrix(xfrm))}">${children}</g>`;
   }
 
-  const xfrm = drawingEffectiveXfrm(node);
+  const xfrm = drawingEffectiveXfrm(node, false, anchorBounds);
   if (!xfrm) return "";
   const transform = drawingSvgMatrixAttribute(drawingSvgAroundCenter(xfrm));
   if (node.localName === "pic") {
@@ -2618,7 +2618,7 @@ function drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml = "") {
         .filter((child) => child.nodeType === 1 && ["sp", "cxnSp", "grpSp", "pic"].includes(child.localName))
         .map((node) => ({
           node,
-          anchorBounds: node.localName === "grpSp" ? anchorBounds : null,
+          anchorBounds,
         }));
     });
   if (!rootItems.length) return null;
@@ -3189,9 +3189,66 @@ function recordLineDiagramNodes(record) {
     .filter((node, index, array) => node && array.indexOf(node) === index);
 }
 
+function diagramIndexedSearchTokens(record) {
+  return recordLineDiagramTokens(record)
+    .map(normalizeDiagramSearchText)
+    .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
+}
+
+function b2cDiagramNodeScore(diagram, nodeKeys) {
+  const diagramKeys = [
+    diagram.nodeKey,
+    diagramMatchKey(diagram.nodeName),
+    diagramMatchKey(diagram.sheetName),
+  ].filter(Boolean);
+  if (!diagramKeys.length || !nodeKeys.length) return 0;
+  if (diagramKeys.some((key) => nodeKeys.includes(key))) return 80;
+  if (diagramKeys.some((key) => nodeKeys.some((nodeKey) => key.includes(nodeKey) || nodeKey.includes(key)))) return 35;
+  return 0;
+}
+
+function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens) {
+  const indexedMatches = matchedIndexedTargets(diagram.searchTargets || [], tokens);
+  const nodeScore = b2cDiagramNodeScore(diagram, nodeKeys);
+  const exactIndexed = indexedMatches.filter((match) => match.fullTokenMatch).length;
+  const directText = [
+    record.cellName,
+    record.onuCellConfig,
+    record.b2cName,
+    record.serviceName,
+  ].map(normalizeDiagramSearchText).filter(Boolean);
+  const directMatches = indexedMatches.filter((match) => {
+    const targetText = normalizeDiagramSearchText(match.target?.text || match.target?.label || "");
+    return directText.some((text) => text.length >= 6 && findContinuousDiagramMatch(targetText, [text]));
+  }).length;
+  return {
+    diagram,
+    indexedMatches,
+    nodeScore,
+    score: (indexedMatches.length * 1000) + (exactIndexed * 350) + (directMatches * 500) + nodeScore,
+  };
+}
+
 async function findB2CDiagramForRecord(record) {
   const diagrams = await loadB2CDiagrams(record.stationName);
   const nodes = recordLineDiagramNodes(record);
+  const nodeKeys = nodes.map(diagramMatchKey).filter(Boolean);
+  const tokens = diagramIndexedSearchTokens(record);
+  const scored = diagrams
+    .map((diagram) => scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens))
+    .filter((candidate) => candidate.score > 0)
+    .sort((first, second) => {
+      if (second.indexedMatches.length !== first.indexedMatches.length) return second.indexedMatches.length - first.indexedMatches.length;
+      if (second.score !== first.score) return second.score - first.score;
+      return String(first.diagram.sheetName || "").localeCompare(String(second.diagram.sheetName || ""), "ko");
+    });
+  const indexedCandidate = scored.find((candidate) => candidate.indexedMatches.length);
+  if (indexedCandidate) {
+    return { diagram: indexedCandidate.diagram, node: indexedCandidate.diagram.nodeName || nodes[0] || "" };
+  }
+  const hasIndexedDiagrams = diagrams.some((diagram) => diagram.searchTargets?.length);
+  const b2cLookupRequiresExactSheet = Boolean(record.b2cName || record.serviceName) && tokens.length && hasIndexedDiagrams;
+  if (b2cLookupRequiresExactSheet) return { diagram: null, node: nodes[0] || "" };
   for (const node of nodes) {
     const nodeKey = diagramMatchKey(node);
     if (!nodeKey) continue;
