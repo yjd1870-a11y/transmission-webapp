@@ -4,7 +4,15 @@ const STORAGE_KEYS = {
   floorPlans: "catvFloorPlans",
   b2cLines: "catvB2CLines",
   b2cDiagrams: "catvB2CDiagrams",
+  sharedDbVersion: "catvSharedDbVersion",
+  sharedDbDirty: "catvSharedDbDirty",
 };
+
+const APP_VERSION = "CATV0708-DBSYNC";
+const SHARED_DB_PATH = "assets/shared-db.json";
+const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
+const GITHUB_SHARED_DB_BRANCH = "main";
+let suppressSharedDbDirty = false;
 
 const userColumns = ["id", "password", "name", "role"];
 const recordColumns = [
@@ -137,15 +145,25 @@ let pendingSearchRecords = [];
 let pendingB2CSearchRecords = [];
 
 function ensureSeedData() {
-  if (!localStorage.getItem(STORAGE_KEYS.users)) {
-    saveUsers(sampleUsers);
-  }
+  suppressSharedDbDirty = true;
+  try {
+    if (!localStorage.getItem(STORAGE_KEYS.users)) {
+      saveUsers(sampleUsers);
+    }
 
-  if (!localStorage.getItem(STORAGE_KEYS.records)) {
-    saveRecords(sampleRecords.map(normalizeRecord));
-  } else {
-    saveRecords(loadRecords().map(normalizeRecord));
+    if (!localStorage.getItem(STORAGE_KEYS.records)) {
+      saveRecords(sampleRecords.map(normalizeRecord));
+    } else {
+      saveRecords(loadRecords().map(normalizeRecord));
+    }
+  } finally {
+    suppressSharedDbDirty = false;
   }
+}
+
+function markSharedDbDirty() {
+  if (suppressSharedDbDirty) return;
+  localStorage.setItem(STORAGE_KEYS.sharedDbDirty, "true");
 }
 
 function loadUsers() {
@@ -154,6 +172,7 @@ function loadUsers() {
 
 function saveUsers(users) {
   localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
+  markSharedDbDirty();
 }
 
 function loadRecords() {
@@ -162,6 +181,7 @@ function loadRecords() {
 
 function saveRecords(records) {
   localStorage.setItem(STORAGE_KEYS.records, JSON.stringify(records));
+  markSharedDbDirty();
 }
 
 function loadFloorPlans() {
@@ -170,6 +190,7 @@ function loadFloorPlans() {
 
 function saveFloorPlans(plans) {
   localStorage.setItem(STORAGE_KEYS.floorPlans, JSON.stringify(plans));
+  markSharedDbDirty();
 }
 
 function loadB2CLines() {
@@ -178,6 +199,7 @@ function loadB2CLines() {
 
 function saveB2CLines(lines) {
   localStorage.setItem(STORAGE_KEYS.b2cLines, JSON.stringify(lines));
+  markSharedDbDirty();
 }
 
 function createDbSourceId(prefix = "db") {
@@ -397,6 +419,190 @@ async function deleteAllB2CDiagrams() {
     });
   } finally {
     db.close();
+  }
+}
+
+async function replaceB2CDiagrams(diagrams = []) {
+  const db = await openAppDb();
+  try {
+    const tx = db.transaction(B2C_DIAGRAM_STORE, "readwrite");
+    const store = tx.objectStore(B2C_DIAGRAM_STORE);
+    store.clear();
+    diagrams.forEach((diagram) => {
+      const station = stationKey(diagram.stationName);
+      const source = diagram.sourceId || "shared";
+      const sheet = diagram.sheetName || diagram.nodeName || Math.random().toString(36).slice(2);
+      store.put({
+        ...diagram,
+        sourceId: source,
+        id: diagram.id || `${station}::${source}::${sheet}`,
+      });
+    });
+    await new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error("공용 직선도 DB 저장에 실패했습니다."));
+      tx.onabort = () => reject(tx.error || new Error("공용 직선도 DB 저장이 중단되었습니다."));
+    });
+    localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
+  } finally {
+    db.close();
+  }
+}
+
+function sharedDbVersionOf(db) {
+  return String(db?.version || db?.updatedAt || "");
+}
+
+function setSharedDbClean(version) {
+  if (version) localStorage.setItem(STORAGE_KEYS.sharedDbVersion, version);
+  localStorage.removeItem(STORAGE_KEYS.sharedDbDirty);
+}
+
+function hasSharedDbContent(db) {
+  return Boolean(db)
+    && (Array.isArray(db.users)
+      || Array.isArray(db.records)
+      || Array.isArray(db.floorPlans)
+      || Array.isArray(db.b2cLines)
+      || Array.isArray(db.b2cDiagrams));
+}
+
+async function applySharedDatabase(db) {
+  if (!hasSharedDbContent(db)) return false;
+  suppressSharedDbDirty = true;
+  try {
+    if (Array.isArray(db.users)) saveUsers(db.users);
+    if (Array.isArray(db.records)) saveRecords(db.records.map(normalizeRecord));
+    if (Array.isArray(db.floorPlans)) saveFloorPlans(db.floorPlans);
+    if (Array.isArray(db.b2cLines)) saveB2CLines(db.b2cLines);
+    if (Array.isArray(db.b2cDiagrams)) await replaceB2CDiagrams(db.b2cDiagrams);
+    setSharedDbClean(sharedDbVersionOf(db));
+    return true;
+  } finally {
+    suppressSharedDbDirty = false;
+  }
+}
+
+async function loadSharedDatabaseFromSite({ force = false } = {}) {
+  const url = new URL(SHARED_DB_PATH, window.location.href);
+  url.searchParams.set("v", force ? String(Date.now()) : APP_VERSION);
+  try {
+    const response = await fetch(url.href, { cache: "no-store" });
+    if (!response.ok) return false;
+    const db = await response.json();
+    const version = sharedDbVersionOf(db);
+    const currentVersion = localStorage.getItem(STORAGE_KEYS.sharedDbVersion) || "";
+    const isDirty = localStorage.getItem(STORAGE_KEYS.sharedDbDirty) === "true";
+    if (!force && isDirty && currentVersion && version !== currentVersion) return false;
+    if (!force && version && version === currentVersion) return true;
+    return applySharedDatabase(db);
+  } catch (error) {
+    console.warn("공용 DB를 불러오지 못했습니다.", error);
+    return false;
+  }
+}
+
+async function sharedDatabaseSnapshot() {
+  const updatedAt = new Date().toISOString();
+  let b2cDiagrams = [];
+  try {
+    b2cDiagrams = await loadB2CDiagrams();
+  } catch (error) {
+    console.warn("B2C 직선도 DB 스냅샷 생성 실패", error);
+  }
+  return {
+    schemaVersion: 1,
+    version: updatedAt,
+    appVersion: APP_VERSION,
+    updatedAt,
+    users: loadUsers(),
+    records: loadRecords(),
+    floorPlans: loadFloorPlans(),
+    b2cLines: loadB2CLines(),
+    b2cDiagrams,
+  };
+}
+
+function sharedDbFileName() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
+  return `CATV_shared_db_${stamp}.json`;
+}
+
+async function downloadSharedDatabase() {
+  const db = await sharedDatabaseSnapshot();
+  const content = JSON.stringify(db, null, 2);
+  downloadBlob(new Blob([content], { type: "application/json;charset=utf-8" }), sharedDbFileName());
+  setSharedDbClean(sharedDbVersionOf(db));
+  renderSharedDbAdmin();
+}
+
+async function refreshSharedDatabaseFromSite() {
+  const status = qs("#sharedDbMessage");
+  if (status) status.textContent = "공용 DB를 불러오는 중입니다.";
+  const loaded = await loadSharedDatabaseFromSite({ force: true });
+  if (loaded) {
+    renderAdmin();
+    if (status) status.textContent = "공용 DB를 현재 기기에 적용했습니다.";
+  } else if (status) {
+    status.textContent = "적용할 공용 DB 파일을 찾지 못했습니다.";
+    status.classList.add("is-error");
+  }
+}
+
+async function githubSharedDbRequest(path, token, options = {}) {
+  const response = await fetch(`https://api.github.com${path}`, {
+    ...options,
+    headers: {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${token}`,
+      "X-GitHub-Api-Version": "2022-11-28",
+      ...(options.headers || {}),
+    },
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API ${response.status}: ${text.slice(0, 240)}`);
+  }
+  return response.status === 204 ? null : response.json();
+}
+
+async function publishSharedDatabaseToGitHub() {
+  const status = qs("#sharedDbMessage");
+  const setStatus = (text, isError = false) => {
+    if (!status) return;
+    status.textContent = text;
+    status.classList.toggle("is-error", isError);
+  };
+  const token = prompt("GitHub 토큰을 입력하세요. repo 권한이 필요합니다.");
+  if (!token) return setStatus("공용 DB 게시가 취소되었습니다.", true);
+  try {
+    setStatus("공용 DB를 생성하는 중입니다.");
+    const db = await sharedDatabaseSnapshot();
+    const content = JSON.stringify(db, null, 2);
+    const path = `/repos/${GITHUB_SHARED_DB_REPO}/contents/${SHARED_DB_PATH}`;
+    let sha = "";
+    try {
+      const existing = await githubSharedDbRequest(`${path}?ref=${GITHUB_SHARED_DB_BRANCH}`, token);
+      sha = existing?.sha || "";
+    } catch (error) {
+      if (!String(error.message || "").includes("404")) throw error;
+    }
+    setStatus("GitHub 공용 DB 파일을 업데이트하는 중입니다.");
+    await githubSharedDbRequest(path, token, {
+      method: "PUT",
+      body: JSON.stringify({
+        branch: GITHUB_SHARED_DB_BRANCH,
+        message: `Update CATV shared DB ${db.updatedAt}`,
+        content: bytesToBase64(new TextEncoder().encode(content)),
+        ...(sha ? { sha } : {}),
+      }),
+    });
+    setSharedDbClean(sharedDbVersionOf(db));
+    setStatus("공용 DB 게시 완료. 스마트폰은 새로고침하면 같은 DB를 사용합니다.");
+    renderSharedDbAdmin();
+  } catch (error) {
+    console.error("공용 DB 게시 실패", error);
+    setStatus(`공용 DB 게시 실패: ${error.message || "GitHub 권한 또는 네트워크를 확인하세요."}`, true);
   }
 }
 
@@ -1245,6 +1451,21 @@ async function renderB2CAdmin() {
       renderB2CAdmin();
     });
   });
+}
+
+function renderSharedDbAdmin() {
+  const summary = qs("#sharedDbSummary");
+  const dirty = localStorage.getItem(STORAGE_KEYS.sharedDbDirty) === "true";
+  const version = localStorage.getItem(STORAGE_KEYS.sharedDbVersion) || "공용 DB 미적용";
+  if (!summary) return;
+  summary.innerHTML = `
+    <span>가입 ${loadUsers().length}건</span>
+    <span>데이터 ${loadRecords().length}건</span>
+    <span>평면도 ${loadFloorPlans().length}건</span>
+    <span>B2C ${loadB2CLines().length}건</span>
+    <strong>${dirty ? "공용 게시 필요" : "공용 DB 동기화됨"}</strong>
+    <small>${escapeHtml(version)}</small>
+  `;
 }
 
 const EXCEL_INDEXED_COLORS = {
@@ -3573,6 +3794,7 @@ function renderAdmin() {
   renderEditableTable("dataTable", recordColumns, loadRecords(), saveRecords);
   renderFloorPlansAdmin();
   renderB2CAdmin();
+  renderSharedDbAdmin();
 }
 
 function clearUsersDatabase() {
@@ -3816,8 +4038,16 @@ function bindEvents() {
   qs("#dataFile").addEventListener("change", (event) => importExcel(event, "records"));
   qs("#saveFloorPlanBtn").addEventListener("click", saveFloorPlan);
   qs("#saveB2CBtn").addEventListener("click", saveB2CFile);
+  qs("#publishSharedDbBtn")?.addEventListener("click", publishSharedDatabaseToGitHub);
+  qs("#downloadSharedDbBtn")?.addEventListener("click", downloadSharedDatabase);
+  qs("#refreshSharedDbBtn")?.addEventListener("click", refreshSharedDatabaseFromSite);
 }
 
-ensureSeedData();
-bindEvents();
-showView("loginView");
+async function initApp() {
+  await loadSharedDatabaseFromSite();
+  ensureSeedData();
+  bindEvents();
+  showView("loginView");
+}
+
+initApp();

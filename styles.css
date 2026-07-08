@@ -403,6 +403,39 @@
 .floor-plan-list-item { display: flex; align-items: center; gap: 10px; padding: 9px; border: 1px solid var(--line); }
 .floor-plan-list-item span { flex: 1; color: var(--muted); }
 .floor-plan-list-item button { background: #ffe5dd; color: #8a1f11; }
+.shared-db-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+.shared-db-summary span,
+.shared-db-summary strong,
+.shared-db-summary small {
+  display: inline-grid;
+  min-height: 32px;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid #c7d5df;
+  border-radius: 6px;
+  background: #f8fbfd;
+  color: #23313d;
+  font-size: 13px;
+  font-weight: 800;
+}
+.shared-db-summary strong {
+  border-color: #126a9c;
+  color: #fff;
+  background: #126a9c;
+}
+.shared-db-summary small {
+  max-width: 100%;
+  color: #607085;
+  font-weight: 700;
+}
+.shared-db-actions {
+  margin: 8px 0;
+}
 .uploaded-floor-plan { display: grid; place-items: center; overflow: auto !important; background: #fff; }
 .uploaded-floor-plan > img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
 .uploaded-image-plan { position: relative; display: inline-block; max-width: 100%; max-height: 100%; }

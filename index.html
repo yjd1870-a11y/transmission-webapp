@@ -150,11 +150,23 @@
           <p id="b2cMessage" class="floor-plan-message" role="status"></p>
           <div id="b2cList" class="floor-plans-list"></div>
         </article>
+
+        <article class="admin-panel shared-db-admin">
+          <div class="panel-head"><h2>공용 배포 DB</h2></div>
+          <div id="sharedDbSummary" class="shared-db-summary"></div>
+          <div class="tool-row shared-db-actions">
+            <button id="publishSharedDbBtn" class="secondary-btn" type="button">GitHub 공용 DB 게시</button>
+            <button id="downloadSharedDbBtn" class="secondary-btn" type="button">공용 DB 파일 저장</button>
+            <button id="refreshSharedDbBtn" class="secondary-btn" type="button">공용 DB 새로고침</button>
+          </div>
+          <p class="floor-plan-help">PC에서 DB 업로드 후 공용 DB를 게시하면 스마트폰에서도 같은 링크로 동일한 DB를 조회합니다.</p>
+          <p id="sharedDbMessage" class="floor-plan-message" role="status"></p>
+        </article>
       </section>
     </section>
   </main>
 
-  <script src="assets/line-diagrams/anseong-vector/manifest-data.js?v=CATV0708"></script>
-  <script src="app.js?v=CATV0708"></script>
+  <script src="assets/line-diagrams/anseong-vector/manifest-data.js?v=CATV0708DB"></script>
+  <script src="app.js?v=CATV0708DB"></script>
 </body>
 </html>
