@@ -1983,7 +1983,7 @@ async function extractSheetImages(zip, sheetPath) {
 }
 
 const DRAWING_EMU_PER_PIXEL = 9525;
-const DRAWING_MAX_WIDTH = 4200;
+const DRAWING_MAX_WIDTH = 12000;
 const DRAWING_EMU_PER_POINT = 12700;
 const DRAWING_DEFAULT_COLUMN_WIDTH = 8.43;
 const DRAWING_DEFAULT_ROW_HEIGHT = 15;
@@ -3352,14 +3352,12 @@ function initLineDiagramZoom(root) {
 
   let zoom = 1;
   const minZoom = 1;
-  const maxZoom = 48;
-  const searchZoom = 14;
-  const readableMatchWidth = 280;
-  const readableMatchHeight = 96;
+  const maxZoom = 10;
+  const searchZoom = 10;
   let ready = false;
   let baseWidth = 0;
   let baseHeight = 0;
-  let baseScale = 1 / searchZoom;
+  let baseScale = 0.1;
   let matches = [];
   let matchIndex = 0;
   let pendingMatches = null;
@@ -3389,14 +3387,14 @@ function initLineDiagramZoom(root) {
     const oldHeight = Math.max(1, target.getBoundingClientRect().height);
     const centerX = (viewport.scrollLeft + (viewport.clientWidth / 2)) / oldWidth;
     const centerY = (viewport.scrollTop + (viewport.clientHeight / 2)) / oldHeight;
-    zoom = Math.min(maxZoom, Math.max(minZoom, nextZoom));
+    zoom = Math.min(maxZoom, Math.max(minZoom, Math.round(nextZoom)));
     if (target.classList.contains("excel-plan-canvas")) {
       target.style.zoom = String(baseScale * zoom);
     } else {
       target.style.width = `${baseWidth * zoom}px`;
       target.style.height = `${baseHeight * zoom}px`;
     }
-    label.textContent = `${Math.round(baseScale * zoom * 100)}%`;
+    label.textContent = `${zoom * 10}%`;
     zoomOut.disabled = zoom <= minZoom;
     zoomIn.disabled = zoom >= maxZoom;
     if (preserveCenter) {
@@ -3423,14 +3421,7 @@ function initLineDiagramZoom(root) {
     viewport.scrollTop = Math.max(0, (anchorY * newHeight) - pointY);
   };
 
-  const readableZoomFor = (element) => {
-    if (!element?.isConnected) return searchZoom;
-    const rect = element._diagramMatchFrame?.getBoundingClientRect?.() || element.getBoundingClientRect();
-    const widthFactor = rect.width > 0 ? readableMatchWidth / rect.width : 1;
-    const heightFactor = rect.height > 0 ? readableMatchHeight / rect.height : 1;
-    const neededZoom = zoom * Math.max(widthFactor, heightFactor, 1);
-    return Math.min(maxZoom, Math.max(searchZoom, neededZoom));
-  };
+  const readableZoomFor = () => searchZoom;
 
   const focusMatch = (index, autoZoom = true) => {
     if (!ready || !matches.length) return;
@@ -3482,10 +3473,7 @@ function initLineDiagramZoom(root) {
   const configure = () => {
     const sourceWidth = Number(target.dataset.baseWidth) || target.naturalWidth || target.scrollWidth || target.clientWidth;
     const sourceHeight = Number(target.dataset.baseHeight) || target.naturalHeight || target.scrollHeight || target.clientHeight;
-    const fitWidth = Math.max(1, viewport.clientWidth - 24);
-    const fitHeight = Math.max(1, viewport.clientHeight - 24);
-    baseScale = Math.min(1 / searchZoom, fitWidth / Math.max(1, sourceWidth), fitHeight / Math.max(1, sourceHeight));
-    baseScale = Math.max(0.025, baseScale);
+    baseScale = 0.1;
     baseWidth = sourceWidth * baseScale;
     baseHeight = sourceHeight * baseScale;
     if (!baseWidth || !baseHeight) return;
@@ -3517,8 +3505,7 @@ function initLineDiagramZoom(root) {
   viewport.addEventListener("wheel", (event) => {
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
-    const step = event.ctrlKey ? 0.75 : 0.5;
-    applyAtPoint(zoom + (direction * step), event.clientX, event.clientY);
+    applyAtPoint(zoom + direction, event.clientX, event.clientY);
   }, { passive: false });
 
   let touchGesture = null;
