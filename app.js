@@ -608,28 +608,44 @@ function stationAddressForB2C(stationName) {
 }
 
 function renderB2CRecord(record) {
+  const stationAddress = record.stationAddress || stationAddressForB2C(record.stationName);
   qs("#resultPanel").innerHTML = `
-    <section class="field-record-sheet b2c-record-sheet">
-      <div class="b2c-summary-grid">
-        <span class="field-label">B2C(전용선)</span><strong>${escapeHtml(record.serviceName || record.b2cName || record.searchValues?.find(Boolean) || "-")}</strong>
-        <span class="field-label">비고</span><strong>${escapeHtml(record.memo || "-")}</strong>
-        <span class="field-label">국사</span><strong>${escapeHtml(record.stationName || "-")}</strong>
-      </div>
-      <h2>국사 현황</h2>
-      <div class="field-section-line b2c-line-diagram-row"><h3>* 선번정보</h3><button class="field-line-diagram-btn" type="button" data-b2c-line-diagram>직선도</button></div>
-      <div class="field-table field-circuit-table cell-circuit-table b2c-circuit-table">
-        <div class="field-table-head"><span>항목</span><span>노드</span><span>선번</span><span>평면도</span></div>
-        <div><span>주(1)</span><span>${escapeHtml(record.node || "")}</span><span>${escapeHtml(record.line || "")}</span><button type="button" data-b2c-node-plan ${record.node ? "" : "disabled"}>이동</button></div>
-        <div><span>주(2)</span><span></span><span></span><button type="button" disabled>이동</button></div>
-        <div><span>예비</span><span></span><span></span><button type="button" disabled>이동</button></div>
-      </div>
+    <section class="field-record-sheet b2c-record-sheet kt-field-screen">
+      <article class="kt-info-card">
+        <h2>기본 정보</h2>
+        <div class="kt-basic-grid">
+          <span>B2C : <strong>${escapeHtml(record.serviceName || record.b2cName || record.searchValues?.find(Boolean) || "-")}</strong></span>
+          <span>국사 : <strong>${escapeHtml(record.stationName || "-")}</strong></span>
+        </div>
+        <div class="kt-address">국사주소 : ${escapeHtml(stationAddress || "-")}</div>
+      </article>
+
+      <article class="kt-info-card kt-station-card">
+        <h2>국사 현황</h2>
+        <div class="kt-tabs"><span class="active">선번정보</span><span>송수신기 정보</span></div>
+        <div class="field-table field-circuit-table cell-circuit-table b2c-circuit-table">
+          <div class="field-table-head"><span>항목</span><span>노드</span><span>선번</span><span>평면도</span></div>
+          <div><span>주(1)</span><span>${escapeHtml(record.node || "")}</span><span>${escapeHtml(record.line || "")}</span><button type="button" data-b2c-node-plan ${record.node ? "" : "disabled"}>이동</button></div>
+          <div><span>주(2)</span><span></span><span></span><button type="button" disabled>이동</button></div>
+          <div><span>예비</span><span></span><span></span><button type="button" disabled>이동</button></div>
+        </div>
+        <button class="field-line-diagram-btn kt-diagram-btn" type="button" data-b2c-line-diagram>직선도</button>
+      </article>
+
+      <article class="kt-info-card kt-remarks-card">
+        <h2>비고</h2>
+        <div class="kt-readonly-note">
+          <strong>B2C : ${escapeHtml(record.serviceName || record.b2cName || "-")}</strong>
+          <span>비고: ${escapeHtml(record.memo || "-")}</span>
+        </div>
+      </article>
     </section>
   `;
 
   qs("#resultPanel").querySelector("[data-b2c-line-diagram]")?.addEventListener("click", () => {
     renderHfcLineDiagram({
       stationName: record.stationName,
-      stationAddress: record.stationAddress || stationAddressForB2C(record.stationName),
+      stationAddress,
       cellName: record.cellName || record.serviceName || record.b2cName,
       b2cName: record.b2cName,
       serviceName: record.serviceName,
@@ -641,7 +657,7 @@ function renderB2CRecord(record) {
   qs("#resultPanel").querySelector("[data-b2c-node-plan]")?.addEventListener("click", () => {
     renderNodePlanOverview({
       ...record,
-      stationAddress: record.stationAddress || stationAddressForB2C(record.stationName),
+      stationAddress,
     }, record.node, "B2C");
   });
 }
@@ -713,35 +729,62 @@ function updateRecord(cellName, changes) {
 }
 
 function photoBlock(record, type, title) {
-  return `<section class="field-photo-block" data-photo-type="${type}">
-    <div class="field-subhead"><strong>* ${title}</strong><button class="field-action" data-open-photos="${type}" type="button">현장사진</button></div>
-    <div class="field-info-row field-location-row"><span class="field-label">위치</span><span class="field-value">${escapeHtml(valueText(record, `${type}Location`))}</span></div>
-    <div class="field-info-row"><span class="field-label">제조사</span><span class="field-value">${escapeHtml(valueText(record, `${type}Maker`))}</span><span class="field-label">모델명</span><span class="field-value">${escapeHtml(valueText(record, `${type}Model`))}</span></div>
-    ${type === "onu" ? `<div class="field-info-row"><span class="field-label">분할구분</span><span class="field-value">${escapeHtml(valueText(record, "onuSplit"))}</span><span class="field-label">셀구성</span><span class="field-value">${escapeHtml(valueText(record, "onuCellConfig"))}</span></div>` : ""}
+  const detailRows = type === "onu" ? `
+      <div><dt>분할구분</dt><dd>${escapeHtml(valueText(record, "onuSplit")) || "&nbsp;"}</dd></div>
+      <div><dt>셀구성</dt><dd>${escapeHtml(valueText(record, "onuCellConfig")) || "&nbsp;"}</dd></div>
+    ` : "";
+  return `<section class="field-photo-block kt-hfc-device" data-photo-type="${type}">
+    <div class="kt-device-head"><strong>${title}</strong><button class="field-action" data-open-photos="${type}" type="button">현장사진</button></div>
+    <dl class="kt-device-list">
+      <div><dt>위치</dt><dd>${escapeHtml(valueText(record, `${type}Location`)) || "&nbsp;"}</dd></div>
+      <div><dt>제조사</dt><dd>${escapeHtml(valueText(record, `${type}Maker`)) || "&nbsp;"}</dd></div>
+      <div><dt>모델명</dt><dd>${escapeHtml(valueText(record, `${type}Model`)) || "&nbsp;"}</dd></div>
+      ${detailRows}
+    </dl>
   </section>`;
 }
 
 function renderRecordEnhanced(record) {
   qs("#resultPanel").innerHTML = `
-    <section class="field-record-sheet cell-record-sheet">
-      <div class="field-summary"><span class="field-label">셀 명</span><strong>${escapeHtml(record.cellName)}</strong><span class="field-label">국사</span><strong>${escapeHtml(record.stationName)}</strong></div>
-      <div class="field-address"><span class="field-label">국사주소</span><span>${escapeHtml(record.stationAddress)}</span></div>
-      <h2>국사 현황</h2>
-      <div class="field-section-line cell-line-diagram-row"><h3>* 선번정보</h3><button class="field-line-diagram-btn" data-cell-line-diagram type="button">직선도</button></div>
-      <div class="field-table field-circuit-table cell-circuit-table"><div class="field-table-head"><span>항목</span><span>노드</span><span>선번</span><span>평면도</span></div>
-        <div><span>OTX (주)</span><span>${escapeHtml(record.otxMain)}</span><span>${escapeHtml(circuitLineText(record, "otxLine", "otxMain"))}</span><button type="button" data-node-plan="OTX" data-node-value="${escapeHtml(record.otxMain)}">이동</button></div>
-        <div><span>ORX (주)</span><span>${escapeHtml(record.orxMain)}</span><span>${escapeHtml(circuitLineText(record, "orxLine", "orxMain"))}</span><button type="button" data-node-plan="ORX" data-node-value="${escapeHtml(record.orxMain)}">이동</button></div>
-        <div><span>예비</span><span>${escapeHtml(record.backup)}</span><span>${escapeHtml(circuitLineText(record, "backupLine", "backup"))}</span><button type="button" data-node-plan="예비" data-node-value="${escapeHtml(record.backup)}">이동</button></div>
-      </div>
-      <h3>* 송수신기 정보</h3>
-      <div class="field-table field-device-table cell-device-table"><div class="field-table-head"><span>항목</span><span>랙</span><span>쉘프</span><span>포트</span><span>모델명</span><span>평면도</span></div>
-        ${["otx", "orx"].map((type) => `<div><span>${type.toUpperCase()}</span><span>${escapeHtml(valueText(record, `${type}Rack`))}</span><span>${escapeHtml(valueText(record, `${type}Shelf`))}</span><span>${escapeHtml(valueText(record, `${type}Port`))}</span><span>${escapeHtml(valueText(record, `${type}Model`))}</span><button type="button" data-rack-equipment="${type}">이동</button></div>`).join("")}
-      </div>
-      <h2>HFC 현황</h2>
-      ${photoBlock(record, "onu", "ONU")}
-      ${photoBlock(record, "ups", "UPS")}
-      <h2>비고</h2>
-      <div class="remarks-editor"><textarea id="remarksEditor" aria-label="비고">${escapeHtml(record.remarks)}</textarea><button id="saveRemarksBtn" type="button">저장</button></div>
+    <section class="field-record-sheet cell-record-sheet kt-field-screen">
+      <article class="kt-info-card">
+        <h2>기본 정보</h2>
+        <div class="kt-basic-grid">
+          <span>셀 명 : <strong>${escapeHtml(record.cellName)}</strong></span>
+          <span>국사 : <strong>${escapeHtml(record.stationName)}</strong></span>
+        </div>
+        <div class="kt-address">국사주소 : ${escapeHtml(record.stationAddress || "-")}</div>
+      </article>
+
+      <article class="kt-info-card kt-station-card">
+        <h2>국사 현황</h2>
+        <div class="kt-tabs"><span class="active">선번정보</span><span>송수신기 정보</span></div>
+        <div class="field-table field-circuit-table cell-circuit-table"><div class="field-table-head"><span>항목</span><span>노드</span><span>선번</span><span>평면도</span></div>
+          <div><span>OTX (주)</span><span>${escapeHtml(record.otxMain)}</span><span>${escapeHtml(circuitLineText(record, "otxLine", "otxMain"))}</span><button type="button" data-node-plan="OTX" data-node-value="${escapeHtml(record.otxMain)}">이동</button></div>
+          <div><span>ORX (주)</span><span>${escapeHtml(record.orxMain)}</span><span>${escapeHtml(circuitLineText(record, "orxLine", "orxMain"))}</span><button type="button" data-node-plan="ORX" data-node-value="${escapeHtml(record.orxMain)}">이동</button></div>
+          <div><span>예비</span><span>${escapeHtml(record.backup)}</span><span>${escapeHtml(circuitLineText(record, "backupLine", "backup"))}</span><button type="button" data-node-plan="예비" data-node-value="${escapeHtml(record.backup)}">이동</button></div>
+        </div>
+        <button class="field-line-diagram-btn kt-diagram-btn" data-cell-line-diagram type="button">직선도</button>
+        <div class="kt-device-table-title">송수신기 정보</div>
+        <div class="field-table field-device-table cell-device-table"><div class="field-table-head"><span>항목</span><span>랙</span><span>쉘프</span><span>포트</span><span>모델명</span><span>평면도</span></div>
+          ${["otx", "orx"].map((type) => `<div><span>${type.toUpperCase()}</span><span>${escapeHtml(valueText(record, `${type}Rack`))}</span><span>${escapeHtml(valueText(record, `${type}Shelf`))}</span><span>${escapeHtml(valueText(record, `${type}Port`))}</span><span>${escapeHtml(valueText(record, `${type}Model`))}</span><button type="button" data-rack-equipment="${type}">이동</button></div>`).join("")}
+        </div>
+      </article>
+
+      <article class="kt-info-card kt-hfc-card">
+        <h2>HFC 현황</h2>
+        <div class="kt-hfc-panel">
+          ${photoBlock(record, "onu", "ONU")}
+          ${photoBlock(record, "ups", "UPS")}
+        </div>
+      </article>
+
+      <article class="kt-info-card kt-remarks-card">
+        <h2>비고</h2>
+        <span class="kt-status-dot" aria-hidden="true"></span>
+        <div class="remarks-editor"><textarea id="remarksEditor" aria-label="비고">${escapeHtml(record.remarks)}</textarea></div>
+        <button id="saveRemarksBtn" type="button" class="kt-save-btn">저장</button>
+      </article>
     </section>`;
 
   qs("#resultPanel").querySelectorAll("[data-rack-equipment]").forEach((button) => button.addEventListener("click", () => renderRackOverview(record, button.dataset.rackEquipment)));
@@ -1035,39 +1078,42 @@ function renderRackOverview(record, equipment) {
       <div class="diagram-legend"><span class="legend-active"></span> 선택 장비 <span class="legend-rack"></span> 해당 랙 <span class="legend-empty"></span> 설비 위치</div>
       <div class="rack-plan-label">평면도</div>
       <div class="floor-plan">
-        <div class="plan-site-name">${valueText(record, "stationName") || "국사"}</div>
-        ${floorPlanMarkup}
-        <div class="plan-dark-block" aria-hidden="true"></div>
-        <div class="plan-battery plan-battery-top">밧데리함</div>
-        <div class="plan-cooling cooling-top">항온항습기</div>
-        <div class="plan-cooling cooling-mid">항온항습기</div>
-        <div class="plan-cooling cooling-bottom">항온항습기</div>
-        <div class="plan-racks">
-          ${Object.entries(rackCells).map(([rack, cells]) => {
-            const selected = Number(rack) === selectedRack;
-            return `<div class="plan-rack-row ${selected ? "selected-rack" : ""}">
-              <div class="plan-rack-cells">${cells.map((cell, index) => {
-                const active = selected && (hasExactRackCell
-                  ? normalizeRackUnit(cell) === location.rack
-                  : index === Math.min(cells.length - 1, Math.max(0, Number(location.port))));
-                const longLabel = cell.includes("방송국간망") ? " plan-rack-cell-long" : "";
-                return `<span class="plan-rack-cell${longLabel} ${active ? "active" : ""}" data-rack-unit="${cell}">${cell || "&nbsp;"}${active ? `<small>${upper}</small>` : ""}</span>`;
-              }).join("")}</div>
-            </div>`;
-          }).join("")}
+        <div class="floor-plan-world">
+          <div class="plan-site-name">${valueText(record, "stationName") || "국사"}</div>
+          ${floorPlanMarkup}
+          <div class="plan-dark-block" aria-hidden="true"></div>
+          <div class="plan-battery plan-battery-top">밧데리함</div>
+          <div class="plan-cooling cooling-top">항온항습기</div>
+          <div class="plan-cooling cooling-mid">항온항습기</div>
+          <div class="plan-cooling cooling-bottom">항온항습기</div>
+          <div class="plan-racks">
+            ${Object.entries(rackCells).map(([rack, cells]) => {
+              const selected = Number(rack) === selectedRack;
+              return `<div class="plan-rack-row ${selected ? "selected-rack" : ""}">
+                <div class="plan-rack-cells">${cells.map((cell, index) => {
+                  const active = selected && (hasExactRackCell
+                    ? normalizeRackUnit(cell) === location.rack
+                    : index === Math.min(cells.length - 1, Math.max(0, Number(location.port))));
+                  const longLabel = cell.includes("방송국간망") ? " plan-rack-cell-long" : "";
+                  return `<span class="plan-rack-cell${longLabel} ${active ? "active" : ""}" data-rack-unit="${cell}">${cell || "&nbsp;"}${active ? `<small>${upper}</small>` : ""}</span>`;
+                }).join("")}</div>
+              </div>`;
+            }).join("")}
+          </div>
+          <div class="plan-ups plan-ups-one">UPS</div><div class="plan-ups plan-ups-two">UPS</div>
+          <div class="plan-camera plan-camera-one" aria-hidden="true"></div><div class="plan-camera plan-camera-two" aria-hidden="true"></div><div class="plan-camera plan-camera-three" aria-hidden="true"></div><div class="plan-camera plan-camera-four" aria-hidden="true"></div>
+          <div class="plan-wall plan-wall-upper" aria-hidden="true"></div><div class="plan-wall plan-wall-kink" aria-hidden="true"></div><div class="plan-wall plan-wall-main" aria-hidden="true"></div>
+          <div class="plan-battery plan-battery-side">밧<br>데<br>리<br>함</div>
+          <div class="plan-entry">출<br>입<br>구</div>
+          <div class="plan-battery plan-battery-bottom">밧데리함</div>
         </div>
-        <div class="plan-ups plan-ups-one">UPS</div><div class="plan-ups plan-ups-two">UPS</div>
-        <div class="plan-camera plan-camera-one" aria-hidden="true"></div><div class="plan-camera plan-camera-two" aria-hidden="true"></div><div class="plan-camera plan-camera-three" aria-hidden="true"></div><div class="plan-camera plan-camera-four" aria-hidden="true"></div>
-        <div class="plan-wall plan-wall-upper" aria-hidden="true"></div><div class="plan-wall plan-wall-kink" aria-hidden="true"></div><div class="plan-wall plan-wall-main" aria-hidden="true"></div>
-        <div class="plan-battery plan-battery-side">밧<br>데<br>리<br>함</div>
-        <div class="plan-entry">출<br>입<br>구</div>
-        <div class="plan-battery plan-battery-bottom">밧데리함</div>
       </div>
       <aside class="plan-detail-card"><span>선택 위치</span><strong>랙 ${location.rack || "-"}</strong><dl><div><dt>쉘프</dt><dd>${location.shelf || "-"}</dd></div><div><dt>포트</dt><dd>${location.port || "-"}</dd></div></dl><button class="detail-btn" data-rack-detail type="button">세부정보</button></aside>
     </section>
   `;
 
   applyRegisteredFloorPlan(record, location, upper);
+  initFloorPlanTouchZoom(qs("#rackPanel .floor-plan"));
   const heading = qs("#rackPanel .rack-heading");
   heading.insertAdjacentHTML("beforeend", `<button class="rack-detail-header-btn" data-rack-detail-header type="button">세부정보</button>`);
   heading.querySelector("[data-rack-detail-header]").addEventListener("click", () => renderRackDetail(record, equipment));
@@ -2480,13 +2526,57 @@ function rackMarkerPosition(rack) {
 }
 
 function initFloorPlanTouchZoom(viewport) {
-  const target = viewport?.querySelector(".uploaded-image-plan, .uploaded-excel-plan");
+  const target = viewport?.querySelector(".uploaded-image-plan, .uploaded-excel-plan, .floor-plan-world");
   if (!viewport || !target || viewport.dataset.touchZoomReady === "true") return;
   viewport.dataset.touchZoomReady = "true";
   viewport.classList.add("touch-pan-zoom");
   let zoom = 1;
+  let minZoom = 0.12;
   let gesture = null;
-  const clampZoom = (value) => Math.min(8, Math.max(.75, value));
+  let resizeFrame = 0;
+  const clampZoom = (value) => Math.min(10, Math.max(minZoom, value));
+
+  const prepareImagePlan = () => {
+    const image = target.querySelector("img");
+    if (!image?.naturalWidth || !image?.naturalHeight) return;
+    target.style.width = `${image.naturalWidth}px`;
+    target.style.height = `${image.naturalHeight}px`;
+    image.style.width = "100%";
+    image.style.height = "100%";
+    image.style.maxWidth = "none";
+    image.style.maxHeight = "none";
+  };
+
+  const unscaledSize = () => {
+    const previousZoom = target.style.zoom;
+    target.style.zoom = "1";
+    prepareImagePlan();
+    const rect = target.getBoundingClientRect();
+    const width = Math.max(1, target.scrollWidth, rect.width);
+    const height = Math.max(1, target.scrollHeight, rect.height);
+    target.style.zoom = previousZoom;
+    return { width, height };
+  };
+
+  const fitZoom = () => {
+    const { width, height } = unscaledSize();
+    const availableWidth = Math.max(1, viewport.clientWidth - 2);
+    const availableHeight = Math.max(1, viewport.clientHeight - 2);
+    return Math.min(1, Math.max(0.08, Math.min(availableWidth / width, availableHeight / height) * 0.98));
+  };
+
+  const applyZoom = (nextZoom) => {
+    zoom = clampZoom(nextZoom);
+    target.style.zoom = String(zoom);
+  };
+
+  const configure = () => {
+    minZoom = fitZoom();
+    applyZoom(minZoom);
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
+  };
+
   const setZoomAt = (nextZoom, clientX, clientY) => {
     const viewportRect = viewport.getBoundingClientRect();
     const pointX = clientX - viewportRect.left;
@@ -2495,8 +2585,7 @@ function initFloorPlanTouchZoom(viewport) {
     const oldHeight = Math.max(1, target.getBoundingClientRect().height);
     const anchorX = (viewport.scrollLeft + pointX) / oldWidth;
     const anchorY = (viewport.scrollTop + pointY) / oldHeight;
-    zoom = clampZoom(nextZoom);
-    target.style.zoom = String(zoom);
+    applyZoom(nextZoom);
     const newWidth = Math.max(1, target.getBoundingClientRect().width);
     const newHeight = Math.max(1, target.getBoundingClientRect().height);
     viewport.scrollLeft = Math.max(0, (anchorX * newWidth) - pointX);
@@ -2543,6 +2632,22 @@ function initFloorPlanTouchZoom(viewport) {
   }, { passive: false });
   viewport.addEventListener("touchend", (event) => {
     if (!event.touches.length) gesture = null;
+  }, { passive: true });
+
+  const image = target.querySelector("img");
+  if (image && !image.complete) image.addEventListener("load", configure, { once: true });
+  else configure();
+  window.addEventListener("resize", () => {
+    window.cancelAnimationFrame(resizeFrame);
+    resizeFrame = window.requestAnimationFrame(() => {
+      const wasAtOverview = zoom <= minZoom + 0.01;
+      minZoom = fitZoom();
+      if (wasAtOverview) {
+        applyZoom(minZoom);
+        viewport.scrollLeft = 0;
+        viewport.scrollTop = 0;
+      }
+    });
   }, { passive: true });
 }
 
@@ -2731,10 +2836,11 @@ function initLineDiagramZoom(root) {
   let zoom = 1;
   const minZoom = 1;
   const maxZoom = 10;
-  const searchZoom = 10;
+  const searchZoom = 6;
   let ready = false;
   let baseWidth = 0;
   let baseHeight = 0;
+  let baseScale = 1 / searchZoom;
   let matches = [];
   let matchIndex = 0;
   let pendingMatches = null;
@@ -2764,14 +2870,14 @@ function initLineDiagramZoom(root) {
     const oldHeight = Math.max(1, target.getBoundingClientRect().height);
     const centerX = (viewport.scrollLeft + (viewport.clientWidth / 2)) / oldWidth;
     const centerY = (viewport.scrollTop + (viewport.clientHeight / 2)) / oldHeight;
-    zoom = Math.min(maxZoom, Math.max(minZoom, Math.round(nextZoom)));
+    zoom = Math.min(maxZoom, Math.max(minZoom, nextZoom));
     if (target.classList.contains("excel-plan-canvas")) {
-      target.style.zoom = String(zoom);
+      target.style.zoom = String(baseScale * zoom);
     } else {
       target.style.width = `${baseWidth * zoom}px`;
       target.style.height = `${baseHeight * zoom}px`;
     }
-    label.textContent = `${zoom * 10}%`;
+    label.textContent = `${Math.round(baseScale * zoom * 100)}%`;
     zoomOut.disabled = zoom <= minZoom;
     zoomIn.disabled = zoom >= maxZoom;
     if (preserveCenter) {
@@ -2824,8 +2930,8 @@ function initLineDiagramZoom(root) {
 
     if (autoZoom) {
       apply(searchZoom, false);
+      centerOn(selected);
     }
-    centerOn(selected);
   };
 
   const setMatches = (elements) => {
@@ -2842,23 +2948,21 @@ function initLineDiagramZoom(root) {
       if (mapCard) mapCard.hidden = true;
       return;
     }
-    focusMatch(0, true);
+    focusMatch(0, false);
   };
 
   const configure = () => {
     const sourceWidth = Number(target.dataset.baseWidth) || target.naturalWidth || target.scrollWidth || target.clientWidth;
     const sourceHeight = Number(target.dataset.baseHeight) || target.naturalHeight || target.scrollHeight || target.clientHeight;
-    if (target.tagName === "IMG" && target.naturalWidth && target.naturalHeight) {
-      const fitWidth = Math.max(300, viewport.clientWidth - 24);
-      baseWidth = Math.min(target.naturalWidth / searchZoom, fitWidth);
-      baseHeight = baseWidth * (target.naturalHeight / target.naturalWidth);
-    } else {
-      baseWidth = sourceWidth;
-      baseHeight = sourceHeight;
-    }
+    const fitWidth = Math.max(1, viewport.clientWidth - 24);
+    const fitHeight = Math.max(1, viewport.clientHeight - 24);
+    baseScale = Math.min(1 / searchZoom, fitWidth / Math.max(1, sourceWidth), fitHeight / Math.max(1, sourceHeight));
+    baseScale = Math.max(0.025, baseScale);
+    baseWidth = sourceWidth * baseScale;
+    baseHeight = sourceHeight * baseScale;
     if (!baseWidth || !baseHeight) return;
-    target.dataset.baseWidth = String(baseWidth);
-    target.dataset.baseHeight = String(baseHeight);
+    target.dataset.baseWidth = String(sourceWidth);
+    target.dataset.baseHeight = String(sourceHeight);
     ready = true;
     apply(1, false);
     if (pendingMatches) {
@@ -2871,7 +2975,8 @@ function initLineDiagramZoom(root) {
   zoomOut.addEventListener("click", () => apply(zoom - 1));
   zoomReset.addEventListener("click", () => {
     apply(1, false);
-    if (matches.length) centerOn(matches[matchIndex]);
+    viewport.scrollLeft = 0;
+    viewport.scrollTop = 0;
   });
   zoomIn.addEventListener("click", () => apply(zoom + 1));
   matchPrevious?.addEventListener("click", () => focusMatch(matchIndex - 1, true));
@@ -2881,6 +2986,12 @@ function initLineDiagramZoom(root) {
     apply(searchZoom, false);
     centerOn(matches[matchIndex]);
   });
+  viewport.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    const step = event.ctrlKey ? 0.75 : 0.5;
+    applyAtPoint(zoom + (direction * step), event.clientX, event.clientY);
+  }, { passive: false });
 
   let touchGesture = null;
   const touchDistance = (first, second) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
@@ -3017,7 +3128,13 @@ async function initPdfLineDiagramMap(root, diagram) {
     return Math.pow(maxFitMultiplier(), progress);
   };
 
-  const fitScale = () => Math.max(0.000001, (viewport.clientWidth - 2) / Math.max(1, unitViewport.width));
+  const fitScale = () => Math.max(
+    0.000001,
+    Math.min(
+      (viewport.clientWidth - 2) / Math.max(1, unitViewport.width),
+      (viewport.clientHeight - 2) / Math.max(1, unitViewport.height),
+    ),
+  );
 
   // The generic plan viewport is centered by default. A huge PDF world then
   // overflows equally to the left and right, making half of it unreachable by
@@ -3096,13 +3213,13 @@ async function initPdfLineDiagramMap(root, diagram) {
     const anchorY = anchor?.y ?? (viewport.clientHeight / 2);
     const relativeX = (viewport.scrollLeft + anchorX) / oldWidth;
     const relativeY = (viewport.scrollTop + anchorY) / oldHeight;
-    level = Math.min(maxLevel, Math.max(minLevel, Math.round(nextLevel)));
+    level = Math.min(maxLevel, Math.max(minLevel, nextLevel));
     scale = fitScale() * levelMultiplier(level);
     const newWidth = unitViewport.width * scale;
     const newHeight = unitViewport.height * scale;
     world.style.width = `${newWidth}px`;
     world.style.height = `${newHeight}px`;
-    label.textContent = `${level * 10}%`;
+    label.textContent = `${Math.round(level * 10)}%`;
     zoomOut.disabled = level <= minLevel;
     zoomIn.disabled = level >= maxLevel;
     if (preserveCenter) {
@@ -3173,7 +3290,7 @@ async function initPdfLineDiagramMap(root, diagram) {
       return;
     }
     updateMarkerPositions();
-    focusMatch(0, true);
+    focusMatch(0, false);
   };
 
   zoomOut.addEventListener("click", () => applyLevel(level - 1));
@@ -3188,6 +3305,16 @@ async function initPdfLineDiagramMap(root, diagram) {
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => focusMatch(matchIndex, true));
   viewport.addEventListener("scroll", scheduleRender, { passive: true });
+  viewport.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const direction = event.deltaY > 0 ? -1 : 1;
+    const step = event.ctrlKey ? 0.75 : 0.5;
+    const rect = viewport.getBoundingClientRect();
+    applyLevel(level + (direction * step), true, {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }, { passive: false });
 
   let touchGesture = null;
   const touchDistance = (first, second) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
