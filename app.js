@@ -2156,6 +2156,73 @@ function drawingGeometryAdjustment(node, name, fallback = 50000) {
   return Math.max(-100000, Math.min(200000, value));
 }
 
+function drawingCustomGeometryPath(node, xfrm) {
+  const shapeProperties = drawingChild(node, "spPr");
+  const customGeometry = drawingChild(shapeProperties, "custGeom");
+  const pathList = drawingChild(customGeometry, "pathLst");
+  const paths = [...(pathList?.childNodes || [])].filter((child) => child.nodeType === 1 && child.localName === "path");
+  if (!paths.length) return "";
+
+  const guideValues = new Map();
+  xmlElements(customGeometry, "gd").forEach((guide) => {
+    const name = guide.getAttribute("name");
+    const match = String(guide.getAttribute("fmla") || "").match(/-?\d+(?:\.\d+)?/);
+    if (name && match) guideValues.set(name, Number(match[0]));
+  });
+  const rawValue = (value) => {
+    if (value === undefined || value === null || value === "") return 0;
+    if (guideValues.has(value)) return guideValues.get(value);
+    const number = Number(value);
+    return Number.isFinite(number) ? number : 0;
+  };
+  const pointOf = (point, scaleX, scaleY) => ({
+    x: xfrm.x + (rawValue(point?.getAttribute("x")) * scaleX),
+    y: xfrm.y + (rawValue(point?.getAttribute("y")) * scaleY),
+  });
+
+  return paths.map((pathNode) => {
+    const pathWidth = Math.max(1, drawingNumber(pathNode, "w", 21600));
+    const pathHeight = Math.max(1, drawingNumber(pathNode, "h", 21600));
+    const scaleX = xfrm.width / pathWidth;
+    const scaleY = xfrm.height / pathHeight;
+    let current = { x: xfrm.x, y: xfrm.y };
+    const commands = [];
+    [...pathNode.childNodes].filter((child) => child.nodeType === 1).forEach((command) => {
+      const points = [...command.childNodes].filter((child) => child.nodeType === 1 && child.localName === "pt");
+      if (command.localName === "moveTo" && points[0]) {
+        current = pointOf(points[0], scaleX, scaleY);
+        commands.push(`M ${current.x} ${current.y}`);
+      } else if (command.localName === "lnTo" && points[0]) {
+        current = pointOf(points[0], scaleX, scaleY);
+        commands.push(`L ${current.x} ${current.y}`);
+      } else if (command.localName === "quadBezTo" && points.length >= 2) {
+        const control = pointOf(points[0], scaleX, scaleY);
+        current = pointOf(points[1], scaleX, scaleY);
+        commands.push(`Q ${control.x} ${control.y} ${current.x} ${current.y}`);
+      } else if (command.localName === "cubicBezTo" && points.length >= 3) {
+        const first = pointOf(points[0], scaleX, scaleY);
+        const second = pointOf(points[1], scaleX, scaleY);
+        current = pointOf(points[2], scaleX, scaleY);
+        commands.push(`C ${first.x} ${first.y} ${second.x} ${second.y} ${current.x} ${current.y}`);
+      } else if (command.localName === "arcTo") {
+        const widthRadius = Math.max(1, rawValue(command.getAttribute("wR")) * scaleX);
+        const heightRadius = Math.max(1, rawValue(command.getAttribute("hR")) * scaleY);
+        const swing = rawValue(command.getAttribute("swAng"));
+        const endAngle = (rawValue(command.getAttribute("stAng")) + swing) / 60000 * Math.PI / 180;
+        const end = {
+          x: current.x + (Math.cos(endAngle) * widthRadius),
+          y: current.y + (Math.sin(endAngle) * heightRadius),
+        };
+        commands.push(`A ${widthRadius} ${heightRadius} 0 ${Math.abs(swing) > 10800000 ? 1 : 0} ${swing >= 0 ? 1 : 0} ${end.x} ${end.y}`);
+        current = end;
+      } else if (command.localName === "close") {
+        commands.push("Z");
+      }
+    });
+    return commands.join(" ");
+  }).filter(Boolean).join(" ");
+}
+
 function drawingBounds(transform, xfrm) {
   if (!xfrm) return null;
   const start = drawingTransformPoint(transform, xfrm.x, xfrm.y);
@@ -2276,6 +2343,10 @@ function drawingSvgGeometry(node, xfrm, shapeStyle) {
     : "";
   const common = `fill="${shapeStyle.fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}"${dashArray}`;
   const geometry = String(shapeStyle.geometry || "rect");
+  const customPath = drawingCustomGeometryPath(node, xfrm);
+  if (customPath) {
+    return `<path d="${customPath}" ${common} fill-rule="evenodd"/>`;
+  }
 
   if (node.localName === "cxnSp" || /connector|^line$/i.test(geometry)) {
     let path = `M ${x} ${y} L ${x + width} ${y + height}`;
