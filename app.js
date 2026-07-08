@@ -2255,7 +2255,8 @@ function drawingTextStyle(node) {
 
 function drawingShapeStyle(node) {
   const shapeProperties = drawingChild(node, "spPr");
-  const geometry = drawingChild(shapeProperties, "prstGeom")?.getAttribute("prst") || "rect";
+  const hasCustomGeometry = Boolean(drawingChild(shapeProperties, "custGeom"));
+  const geometry = drawingChild(shapeProperties, "prstGeom")?.getAttribute("prst") || (hasCustomGeometry ? "custom" : "rect");
   const fillNode = drawingChild(shapeProperties, "solidFill");
   const noFill = Boolean(drawingChild(shapeProperties, "noFill"));
   const line = drawingChild(shapeProperties, "ln");
@@ -2276,6 +2277,7 @@ function drawingShapeStyle(node) {
   };
   return {
     geometry,
+    hasCustomGeometry,
     fill: noFill ? "transparent" : drawingColor(fillNode, "transparent"),
     stroke: lineNoFill ? "transparent" : drawingColor(lineFill, geometry.includes("Connector") ? "#111111" : "#1f2937"),
     strokeWidth: Math.max(0.7, drawingNumber(line, "w", 9525) / DRAWING_EMU_PER_PIXEL),
@@ -2454,6 +2456,24 @@ function drawingSvgAroundCenter(xfrm) {
   );
 }
 
+function drawingSvgTextCorrection(xfrm) {
+  const normalizedRotation = ((xfrm.rotation % 360) + 360) % 360;
+  const shouldRotateUpright = normalizedRotation > 135 && normalizedRotation < 225;
+  if (!xfrm.flipH && !xfrm.flipV && !shouldRotateUpright) return "";
+  const centerX = xfrm.x + (xfrm.width / 2);
+  const centerY = xfrm.y + (xfrm.height / 2);
+  let matrix = drawingSvgTranslation(centerX, centerY);
+  if (shouldRotateUpright) matrix = drawingSvgMatrixMultiply(matrix, drawingSvgRotation(180));
+  matrix = drawingSvgMatrixMultiply(
+    matrix,
+    drawingSvgMatrixMultiply(
+      drawingSvgScale(xfrm.flipH ? -1 : 1, xfrm.flipV ? -1 : 1),
+      drawingSvgTranslation(-centerX, -centerY),
+    ),
+  );
+  return drawingSvgMatrixAttribute(matrix);
+}
+
 function drawingSvgGroupMatrix(xfrm) {
   const scaleX = xfrm.width / xfrm.childWidth;
   const scaleY = xfrm.height / xfrm.childHeight;
@@ -2477,7 +2497,9 @@ function drawingSvgGeometry(node, xfrm, shapeStyle) {
   const dashArray = shapeStyle.dashPattern
     ? ` stroke-dasharray="${shapeStyle.dashPattern.map((part) => Math.round(part * strokeWidth)).join(" ")}"`
     : "";
-  const common = `fill="${shapeStyle.fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}"${dashArray}`;
+  const bleedFill = shapeStyle.hasCustomGeometry && /^#(?:ffcc66|ffc000|ffd966)$/i.test(shapeStyle.fill || "");
+  const fill = bleedFill ? "transparent" : shapeStyle.fill;
+  const common = `fill="${fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}"${dashArray}`;
   const geometry = String(shapeStyle.geometry || "rect");
   const customPath = drawingCustomGeometryPath(node, xfrm);
   if (customPath) {
@@ -2604,7 +2626,9 @@ function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
   const shape = drawingSvgGeometry(node, xfrm, shapeStyle);
   if (node.localName === "sp") stats.shapeCount += 1;
   if (text) stats.texts.push(text);
-  return `<g transform="${transform}">${shape}${drawingSvgText(node, xfrm, shapeStyle)}</g>`;
+  const textSvg = drawingSvgText(node, xfrm, shapeStyle);
+  const textCorrection = textSvg ? drawingSvgTextCorrection(xfrm) : "";
+  return `<g transform="${transform}">${shape}${textCorrection ? `<g transform="${textCorrection}">${textSvg}</g>` : textSvg}</g>`;
 }
 
 function drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml = "") {
@@ -3328,8 +3352,10 @@ function initLineDiagramZoom(root) {
 
   let zoom = 1;
   const minZoom = 1;
-  const maxZoom = 10;
-  const searchZoom = 6;
+  const maxZoom = 48;
+  const searchZoom = 14;
+  const readableMatchWidth = 280;
+  const readableMatchHeight = 96;
   let ready = false;
   let baseWidth = 0;
   let baseHeight = 0;
@@ -3397,6 +3423,15 @@ function initLineDiagramZoom(root) {
     viewport.scrollTop = Math.max(0, (anchorY * newHeight) - pointY);
   };
 
+  const readableZoomFor = (element) => {
+    if (!element?.isConnected) return searchZoom;
+    const rect = element._diagramMatchFrame?.getBoundingClientRect?.() || element.getBoundingClientRect();
+    const widthFactor = rect.width > 0 ? readableMatchWidth / rect.width : 1;
+    const heightFactor = rect.height > 0 ? readableMatchHeight / rect.height : 1;
+    const neededZoom = zoom * Math.max(widthFactor, heightFactor, 1);
+    return Math.min(maxZoom, Math.max(searchZoom, neededZoom));
+  };
+
   const focusMatch = (index, autoZoom = true) => {
     if (!ready || !matches.length) return;
     matchIndex = ((index % matches.length) + matches.length) % matches.length;
@@ -3422,7 +3457,7 @@ function initLineDiagramZoom(root) {
     }
 
     if (autoZoom) {
-      apply(searchZoom, false);
+      apply(readableZoomFor(selected), false);
       centerOn(selected);
     }
   };
@@ -3441,7 +3476,7 @@ function initLineDiagramZoom(root) {
       if (mapCard) mapCard.hidden = true;
       return;
     }
-    focusMatch(0, false);
+    focusMatch(0, true);
   };
 
   const configure = () => {
@@ -3476,7 +3511,7 @@ function initLineDiagramZoom(root) {
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => {
     if (!matches.length) return;
-    apply(searchZoom, false);
+    apply(readableZoomFor(matches[matchIndex]), false);
     centerOn(matches[matchIndex]);
   });
   viewport.addEventListener("wheel", (event) => {
