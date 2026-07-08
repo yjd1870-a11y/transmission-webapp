@@ -1984,6 +1984,9 @@ async function extractSheetImages(zip, sheetPath) {
 
 const DRAWING_EMU_PER_PIXEL = 9525;
 const DRAWING_MAX_WIDTH = 4200;
+const DRAWING_EMU_PER_POINT = 12700;
+const DRAWING_DEFAULT_COLUMN_WIDTH = 8.43;
+const DRAWING_DEFAULT_ROW_HEIGHT = 15;
 
 function drawingChild(node, localName) {
   return [...(node?.childNodes || [])].find((child) => child.nodeType === 1 && child.localName === localName) || null;
@@ -1991,6 +1994,11 @@ function drawingChild(node, localName) {
 
 function drawingNumber(node, name, fallback = 0) {
   const value = Number(node?.getAttribute(name));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function drawingTextNumber(node, fallback = 0) {
+  const value = Number(node?.textContent);
   return Number.isFinite(value) ? value : fallback;
 }
 
@@ -2015,6 +2023,134 @@ function drawingXfrm(node, isGroup = false) {
     flipH: xfrm.getAttribute("flipH") === "1",
     flipV: xfrm.getAttribute("flipV") === "1",
   };
+}
+
+function drawingColumnWidthToEmu(width) {
+  const pixels = width < 1
+    ? Math.floor((width * 12) + .5)
+    : Math.floor((width * 7) + 5);
+  return Math.max(1, pixels * DRAWING_EMU_PER_PIXEL);
+}
+
+function drawingSheetMetrics(sheetXml) {
+  const document = xmlDoc(sheetXml);
+  const sheetFormat = xmlElements(document, "sheetFormatPr")[0];
+  const defaultColumnWidth = drawingNumber(sheetFormat, "defaultColWidth", DRAWING_DEFAULT_COLUMN_WIDTH);
+  const defaultRowHeight = drawingNumber(sheetFormat, "defaultRowHeight", DRAWING_DEFAULT_ROW_HEIGHT);
+  const columnRanges = xmlElements(document, "col").map((column) => ({
+    min: Math.max(0, drawingNumber(column, "min", 1) - 1),
+    max: Math.max(0, drawingNumber(column, "max", 1) - 1),
+    width: drawingNumber(column, "width", defaultColumnWidth),
+  }));
+  const rowHeights = new Map(xmlElements(document, "row").map((row) => [
+    Math.max(0, drawingNumber(row, "r", 1) - 1),
+    drawingNumber(row, "ht", defaultRowHeight) * DRAWING_EMU_PER_POINT,
+  ]));
+  return {
+    defaultColumnWidth,
+    defaultColumnEmu: drawingColumnWidthToEmu(defaultColumnWidth),
+    defaultRowEmu: defaultRowHeight * DRAWING_EMU_PER_POINT,
+    columnRanges,
+    rowHeights,
+    columnOffsetCache: new Map([[0, 0]]),
+    rowOffsetCache: new Map([[0, 0]]),
+  };
+}
+
+function drawingColumnWidthEmu(metrics, index) {
+  const range = metrics.columnRanges.find((column) => index >= column.min && index <= column.max);
+  return range ? drawingColumnWidthToEmu(range.width) : metrics.defaultColumnEmu;
+}
+
+function drawingColumnOffsetEmu(metrics, index) {
+  if (metrics.columnOffsetCache.has(index)) return metrics.columnOffsetCache.get(index);
+  let nearest = 0;
+  for (const key of metrics.columnOffsetCache.keys()) {
+    if (key <= index && key >= nearest) nearest = key;
+  }
+  let offset = metrics.columnOffsetCache.get(nearest) || 0;
+  for (let column = nearest; column < index; column += 1) {
+    offset += drawingColumnWidthEmu(metrics, column);
+    metrics.columnOffsetCache.set(column + 1, offset);
+  }
+  return offset;
+}
+
+function drawingRowOffsetEmu(metrics, index) {
+  if (metrics.rowOffsetCache.has(index)) return metrics.rowOffsetCache.get(index);
+  let nearest = 0;
+  for (const key of metrics.rowOffsetCache.keys()) {
+    if (key <= index && key >= nearest) nearest = key;
+  }
+  let offset = metrics.rowOffsetCache.get(nearest) || 0;
+  for (let row = nearest; row < index; row += 1) {
+    offset += metrics.rowHeights.get(row) || metrics.defaultRowEmu;
+    metrics.rowOffsetCache.set(row + 1, offset);
+  }
+  return offset;
+}
+
+function drawingAnchorMarkerPoint(marker, metrics) {
+  if (!marker || !metrics) return null;
+  const column = Math.max(0, drawingTextNumber(drawingChild(marker, "col")));
+  const row = Math.max(0, drawingTextNumber(drawingChild(marker, "row")));
+  return {
+    x: drawingColumnOffsetEmu(metrics, column) + drawingTextNumber(drawingChild(marker, "colOff")),
+    y: drawingRowOffsetEmu(metrics, row) + drawingTextNumber(drawingChild(marker, "rowOff")),
+  };
+}
+
+function drawingAnchorBounds(anchor, metrics) {
+  if (!anchor || !metrics) return null;
+  if (anchor.localName === "twoCellAnchor") {
+    const from = drawingAnchorMarkerPoint(drawingChild(anchor, "from"), metrics);
+    const to = drawingAnchorMarkerPoint(drawingChild(anchor, "to"), metrics);
+    if (!from || !to) return null;
+    return {
+      x: Math.min(from.x, to.x),
+      y: Math.min(from.y, to.y),
+      width: Math.max(1, Math.abs(to.x - from.x)),
+      height: Math.max(1, Math.abs(to.y - from.y)),
+    };
+  }
+  if (anchor.localName === "oneCellAnchor") {
+    const from = drawingAnchorMarkerPoint(drawingChild(anchor, "from"), metrics);
+    const ext = drawingChild(anchor, "ext");
+    if (!from || !ext) return null;
+    return {
+      x: from.x,
+      y: from.y,
+      width: Math.max(1, drawingNumber(ext, "cx", 1)),
+      height: Math.max(1, drawingNumber(ext, "cy", 1)),
+    };
+  }
+  if (anchor.localName === "absoluteAnchor") {
+    const pos = drawingChild(anchor, "pos");
+    const ext = drawingChild(anchor, "ext");
+    if (!pos || !ext) return null;
+    return {
+      x: drawingNumber(pos, "x"),
+      y: drawingNumber(pos, "y"),
+      width: Math.max(1, drawingNumber(ext, "cx", 1)),
+      height: Math.max(1, drawingNumber(ext, "cy", 1)),
+    };
+  }
+  return null;
+}
+
+function drawingEffectiveXfrm(node, isGroup = false, anchorBounds = null) {
+  const xfrm = drawingXfrm(node, isGroup);
+  if (!xfrm) return null;
+  if (isGroup && anchorBounds) {
+    return {
+      ...xfrm,
+      x: anchorBounds.x,
+      y: anchorBounds.y,
+      width: anchorBounds.width,
+      height: anchorBounds.height,
+    };
+  }
+  return xfrm;
 }
 
 function drawingTransformPoint(transform, x, y) {
@@ -2439,10 +2575,10 @@ function drawingSvgText(node, xfrm, shapeStyle) {
   return `<g class="drawing-diagram-text${darkLabel ? " is-dark-label" : ""}" data-diagram-dark="${darkLabel ? "true" : "false"}" data-diagram-searchable="${searchableLabel ? "true" : "false"}" data-diagram-text="${escapeHtml(textKey)}" data-diagram-x="${xfrm.x}" data-diagram-y="${xfrm.y}" data-diagram-width="${xfrm.width}" data-diagram-height="${xfrm.height}" aria-label="${escapeHtml(text)}"><title>${escapeHtml(text)}</title><text x="${scaledTextX}" y="${scaledTextY}" transform="scale(${textScale})" fill="${color}" font-family="'Malgun Gothic','Apple SD Gothic Neo',Arial,sans-serif" font-size="${renderedFontSize}" font-weight="${style.bold ? 800 : 500}" text-anchor="${textAnchor}"${writingMode}>${tspans}</text></g>`;
 }
 
-function drawingSvgNode(node, imageByRelationship, stats) {
+function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
   if (!node || node.nodeType !== 1) return "";
   if (node.localName === "grpSp") {
-    const xfrm = drawingXfrm(node, true);
+    const xfrm = drawingEffectiveXfrm(node, true, anchorBounds);
     if (!xfrm) return "";
     const children = [...node.childNodes]
       .filter((child) => child.nodeType === 1 && ["sp", "cxnSp", "grpSp", "pic"].includes(child.localName))
@@ -2451,7 +2587,7 @@ function drawingSvgNode(node, imageByRelationship, stats) {
     return `<g transform="${drawingSvgMatrixAttribute(drawingSvgGroupMatrix(xfrm))}">${children}</g>`;
   }
 
-  const xfrm = drawingXfrm(node);
+  const xfrm = drawingEffectiveXfrm(node);
   if (!xfrm) return "";
   const transform = drawingSvgMatrixAttribute(drawingSvgAroundCenter(xfrm));
   if (node.localName === "pic") {
@@ -2471,16 +2607,24 @@ function drawingSvgNode(node, imageByRelationship, stats) {
   return `<g transform="${transform}">${shape}${drawingSvgText(node, xfrm, shapeStyle)}</g>`;
 }
 
-function drawingDiagramHtml(drawingXml, imageByRelationship) {
+function drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml = "") {
   const document = xmlDoc(drawingXml);
-  const rootNodes = [...document.documentElement.childNodes]
-    .flatMap((anchor) => anchor.nodeType === 1
-      ? [...anchor.childNodes].filter((child) => child.nodeType === 1 && ["sp", "cxnSp", "grpSp", "pic"].includes(child.localName))
-      : []);
-  if (!rootNodes.length) return null;
+  const metrics = sheetXml ? drawingSheetMetrics(sheetXml) : null;
+  const rootItems = [...document.documentElement.childNodes]
+    .flatMap((anchor) => {
+      if (anchor.nodeType !== 1) return [];
+      const anchorBounds = drawingAnchorBounds(anchor, metrics);
+      return [...anchor.childNodes]
+        .filter((child) => child.nodeType === 1 && ["sp", "cxnSp", "grpSp", "pic"].includes(child.localName))
+        .map((node) => ({
+          node,
+          anchorBounds: node.localName === "grpSp" ? anchorBounds : null,
+        }));
+    });
+  if (!rootItems.length) return null;
 
-  const bounds = rootNodes
-    .map((node) => drawingXfrm(node, node.localName === "grpSp"))
+  const bounds = rootItems
+    .map(({ node, anchorBounds }) => drawingEffectiveXfrm(node, node.localName === "grpSp", anchorBounds))
     .filter(Boolean);
   const minX = Math.min(...bounds.map((item) => item.x));
   const minY = Math.min(...bounds.map((item) => item.y));
@@ -2497,7 +2641,7 @@ function drawingDiagramHtml(drawingXml, imageByRelationship) {
   const displayWidth = Math.round(Math.min(DRAWING_MAX_WIDTH, Math.max(1400, naturalPixelWidth * .8)));
   const displayHeight = Math.max(480, Math.round(displayWidth * (viewHeight / viewWidth)));
   const stats = { shapeCount: 0, pictureCount: 0, texts: [] };
-  const body = rootNodes.map((node) => drawingSvgNode(node, imageByRelationship, stats)).join("");
+  const body = rootItems.map(({ node, anchorBounds }) => drawingSvgNode(node, imageByRelationship, stats, anchorBounds)).join("");
   const svg = `<svg class="drawing-diagram-svg" xmlns="http://www.w3.org/2000/svg" width="${displayWidth}" height="${displayHeight}" data-base-width="${displayWidth}" data-base-height="${displayHeight}" viewBox="${viewX} ${viewY} ${viewWidth} ${viewHeight}" preserveAspectRatio="xMinYMin meet"><defs><marker id="diagramArrowEnd" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="context-stroke"/></marker><marker id="diagramArrowStart" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="context-stroke"/></marker></defs>${body}</svg>`;
   return {
     html: `<div class="drawing-diagram-canvas">${svg}</div>`,
@@ -2595,7 +2739,7 @@ async function extractSheetDrawingDiagram(zip, sheetPath) {
       const base64 = await imageFile.async("base64");
       imageByRelationship[relationshipId] = `data:${imageMimeFromPath(targetPath)};base64,${base64}`;
     }
-    const diagram = drawingDiagramHtml(drawingXml, imageByRelationship);
+    const diagram = drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml);
     if (diagram) return diagram;
   }
   return null;
