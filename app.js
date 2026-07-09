@@ -817,14 +817,11 @@ function renderB2CRecord(record) {
   const stationAddress = record.stationAddress || stationAddressForB2C(record.stationName);
   qs("#resultPanel").innerHTML = `
     <section class="field-record-sheet b2c-record-sheet kt-field-screen">
-      <article class="kt-info-card">
-        <h2>기본 정보</h2>
-        <div class="kt-basic-grid">
-          <span>B2C : <strong>${escapeHtml(record.serviceName || record.b2cName || record.searchValues?.find(Boolean) || "-")}</strong></span>
-          <span>국사 : <strong>${escapeHtml(record.stationName || "-")}</strong></span>
-        </div>
-        <div class="kt-address">국사주소 : ${escapeHtml(stationAddress || "-")}</div>
-      </article>
+      ${basicInfoCard({
+        title: record.serviceName || record.b2cName || record.searchValues?.find(Boolean),
+        stationName: record.stationName,
+        stationAddress,
+      })}
 
       <article class="kt-info-card kt-station-card">
         <h2>국사 현황</h2>
@@ -874,6 +871,30 @@ function valueText(record, key) {
 
 function circuitLineText(record, key, fallbackKey) {
   return valueText(record, key) || valueText(record, fallbackKey);
+}
+
+function lookupTitle(value) {
+  const text = String(value || "-").trim() || "-";
+  return text.startsWith("#") ? text : `#${text}`;
+}
+
+function basicInfoCard({ title, stationName, stationAddress }) {
+  return `
+    <article class="kt-info-card kt-basic-card">
+      <div class="kt-basic-table">
+        <div class="kt-basic-row kt-basic-main-row">
+          <span class="kt-basic-label">설명</span>
+          <span class="kt-basic-value kt-basic-title">${escapeHtml(lookupTitle(title))}</span>
+          <span class="kt-basic-label kt-station-label">국사</span>
+          <span class="kt-basic-value">${escapeHtml(stationName || "-")}</span>
+        </div>
+        <div class="kt-basic-row kt-basic-address-row">
+          <span class="kt-basic-label">국사주소</span>
+          <span class="kt-basic-value">${escapeHtml(stationAddress || "-")}</span>
+        </div>
+      </div>
+    </article>
+  `;
 }
 
 function row(label1, value1, label2 = "", value2 = "") {
@@ -936,15 +957,21 @@ function updateRecord(cellName, changes) {
 
 function photoBlock(record, type, title) {
   const detailRows = type === "onu" ? `
-      <div><dt>분할구분</dt><dd>${escapeHtml(valueText(record, "onuSplit")) || "&nbsp;"}</dd></div>
-      <div><dt>셀구성</dt><dd>${escapeHtml(valueText(record, "onuCellConfig")) || "&nbsp;"}</dd></div>
+      <div class="kt-device-info-row">
+        <span class="kt-device-label">분할구분</span><span class="kt-device-value">${escapeHtml(valueText(record, "onuSplit")) || "&nbsp;"}</span>
+        <span class="kt-device-label">셀구성</span><span class="kt-device-value">${escapeHtml(valueText(record, "onuCellConfig")) || "&nbsp;"}</span>
+      </div>
     ` : "";
   return `<section class="field-photo-block kt-hfc-device" data-photo-type="${type}">
-    <div class="kt-device-head"><strong>${title}</strong><button class="field-action" data-open-photos="${type}" type="button">현장사진</button></div>
-    <dl class="kt-device-list">
-      <div><dt>위치</dt><dd>${escapeHtml(valueText(record, `${type}Location`)) || "&nbsp;"}</dd></div>
-      <div><dt>제조사</dt><dd>${escapeHtml(valueText(record, `${type}Maker`)) || "&nbsp;"}</dd></div>
-      <div><dt>모델명</dt><dd>${escapeHtml(valueText(record, `${type}Model`)) || "&nbsp;"}</dd></div>
+    <div class="kt-device-head"><strong>${title}</strong><button class="field-action" data-open-photos="${type}" type="button"><span aria-hidden="true">▣</span> 현장사진</button></div>
+    <dl class="kt-device-list kt-device-info-table">
+      <div class="kt-device-info-row kt-device-location-row">
+        <dt class="kt-device-label">위치</dt><dd class="kt-device-value">${escapeHtml(valueText(record, `${type}Location`)) || "&nbsp;"}</dd>
+      </div>
+      <div class="kt-device-info-row">
+        <dt class="kt-device-label">제조사</dt><dd class="kt-device-value">${escapeHtml(valueText(record, `${type}Maker`)) || "&nbsp;"}</dd>
+        <dt class="kt-device-label">모델명</dt><dd class="kt-device-value">${escapeHtml(valueText(record, `${type}Model`)) || "&nbsp;"}</dd>
+      </div>
       ${detailRows}
     </dl>
   </section>`;
@@ -953,14 +980,11 @@ function photoBlock(record, type, title) {
 function renderRecordEnhanced(record) {
   qs("#resultPanel").innerHTML = `
     <section class="field-record-sheet cell-record-sheet kt-field-screen">
-      <article class="kt-info-card">
-        <h2>기본 정보</h2>
-        <div class="kt-basic-grid">
-          <span>셀 명 : <strong>${escapeHtml(record.cellName)}</strong></span>
-          <span>국사 : <strong>${escapeHtml(record.stationName)}</strong></span>
-        </div>
-        <div class="kt-address">국사주소 : ${escapeHtml(record.stationAddress || "-")}</div>
-      </article>
+      ${basicInfoCard({
+        title: record.cellName,
+        stationName: record.stationName,
+        stationAddress: record.stationAddress,
+      })}
 
       <article class="kt-info-card kt-station-card">
         <h2>국사 현황</h2>
@@ -988,14 +1012,17 @@ function renderRecordEnhanced(record) {
       <article class="kt-info-card kt-remarks-card">
         <h2>비고</h2>
         <span class="kt-status-dot" aria-hidden="true"></span>
-        <div class="remarks-editor"><textarea id="remarksEditor" aria-label="비고">${escapeHtml(record.remarks)}</textarea></div>
-        <button id="saveRemarksBtn" type="button" class="kt-save-btn">저장</button>
+        <div class="remarks-editor">
+          <textarea id="remarksEditor" maxlength="1000" placeholder="비고를 입력해주세요.." aria-label="비고">${escapeHtml(record.remarks)}</textarea>
+          <div class="remarks-footer"><span id="remarksCounter">${String(record.remarks || "").length} / 1000</span><button id="saveRemarksBtn" type="button" class="kt-save-btn"><span aria-hidden="true">▣</span> 저장</button></div>
+        </div>
       </article>
     </section>`;
 
   qs("#resultPanel").querySelectorAll("[data-rack-equipment]").forEach((button) => button.addEventListener("click", () => renderRackOverview(record, button.dataset.rackEquipment)));
   qs("#resultPanel").querySelectorAll("[data-node-plan]").forEach((button) => button.addEventListener("click", () => renderNodePlanOverview(record, button.dataset.nodeValue, button.dataset.nodePlan)));
   qs("#resultPanel").querySelector("[data-cell-line-diagram]")?.addEventListener("click", () => renderHfcLineDiagram(record, "cell"));
+  qs("#remarksEditor").addEventListener("input", () => { qs("#remarksCounter").textContent = `${qs("#remarksEditor").value.length} / 1000`; });
   qs("#saveRemarksBtn").addEventListener("click", () => { updateRecord(record.cellName, { remarks: qs("#remarksEditor").value }); renderRecordEnhanced({ ...record, remarks: qs("#remarksEditor").value }); });
   qs("#resultPanel").querySelectorAll("[data-open-photos]").forEach((button) => button.addEventListener("click", () => openPhotoGallery(record, button.dataset.openPhotos)));
   qs("#resultPanel").querySelectorAll("[data-line-diagram]").forEach((button) => button.addEventListener("click", () => renderHfcLineDiagram(record, button.dataset.lineDiagram)));
@@ -3353,7 +3380,7 @@ function initLineDiagramZoom(root) {
   let zoom = 1;
   const minZoom = 1;
   const maxZoom = 10;
-  const searchZoom = 10;
+  const searchZoom = 7;
   let ready = false;
   let baseWidth = 0;
   let baseHeight = 0;
@@ -3423,6 +3450,18 @@ function initLineDiagramZoom(root) {
 
   const readableZoomFor = () => searchZoom;
 
+  const currentMatch = () => matches[matchIndex];
+
+  const applyAtCurrentMatch = (nextZoom) => {
+    const selected = currentMatch();
+    if (!selected) {
+      apply(nextZoom);
+      return;
+    }
+    apply(nextZoom, false);
+    centerOn(selected);
+  };
+
   const focusMatch = (index, autoZoom = true) => {
     if (!ready || !matches.length) return;
     matchIndex = ((index % matches.length) + matches.length) % matches.length;
@@ -3488,13 +3527,13 @@ function initLineDiagramZoom(root) {
     }
   };
 
-  zoomOut.addEventListener("click", () => apply(zoom - 1));
+  zoomOut.addEventListener("click", () => applyAtCurrentMatch(zoom - 1));
   zoomReset.addEventListener("click", () => {
     apply(1, false);
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
   });
-  zoomIn.addEventListener("click", () => apply(zoom + 1));
+  zoomIn.addEventListener("click", () => applyAtCurrentMatch(zoom + 1));
   matchPrevious?.addEventListener("click", () => focusMatch(matchIndex - 1, true));
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => {
@@ -3505,7 +3544,11 @@ function initLineDiagramZoom(root) {
   viewport.addEventListener("wheel", (event) => {
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
-    applyAtPoint(zoom + direction, event.clientX, event.clientY);
+    if (matches.length) {
+      applyAtCurrentMatch(zoom + direction);
+    } else {
+      applyAtPoint(zoom + direction, event.clientX, event.clientY);
+    }
   }, { passive: false });
 
   let touchGesture = null;
@@ -3541,7 +3584,11 @@ function initLineDiagramZoom(root) {
     if (touchGesture.type === "pinch" && event.touches.length >= 2) {
       const midpoint = touchMidpoint(event.touches[0], event.touches[1]);
       const ratio = touchDistance(event.touches[0], event.touches[1]) / touchGesture.distance;
-      applyAtPoint(touchGesture.zoom * ratio, midpoint.x, midpoint.y);
+      if (matches.length) {
+        applyAtCurrentMatch(touchGesture.zoom * ratio);
+      } else {
+        applyAtPoint(touchGesture.zoom * ratio, midpoint.x, midpoint.y);
+      }
       event.preventDefault();
       return;
     }
@@ -3618,6 +3665,7 @@ async function initPdfLineDiagramMap(root, diagram) {
   const unitViewport = page.getViewport({ scale: 1 });
   const minLevel = 1;
   const maxLevel = 10;
+  const searchLevel = 7;
   const indexedWidths = (diagram.searchTargets || [])
     .map((target) => Number(target?.width))
     .filter((width) => Number.isFinite(width) && width > 0);
@@ -3759,13 +3807,18 @@ async function initPdfLineDiagramMap(root, diagram) {
     scheduleRender();
   };
 
-  const readableLevelFor = (marker) => {
-    const widthPercent = Math.max(0.05, Number(marker?.dataset?.mapWidth) || 0.5);
-    const targetWidthAtFit = viewport.clientWidth * (widthPercent / 100);
-    const desiredWidth = Math.min(440, Math.max(230, viewport.clientWidth * 0.62));
-    const requiredMultiplier = Math.max(1, desiredWidth / Math.max(1, targetWidthAtFit));
-    const progress = Math.log(requiredMultiplier) / Math.log(maxFitMultiplier());
-    return Math.min(maxLevel, Math.max(minLevel, Math.ceil(minLevel + (progress * (maxLevel - minLevel)))));
+  const readableLevelFor = () => searchLevel;
+
+  const currentMatch = () => matches[matchIndex];
+
+  const applyLevelAtCurrentMatch = (nextLevel) => {
+    const selected = currentMatch();
+    if (!selected) {
+      applyLevel(nextLevel);
+      return;
+    }
+    applyLevel(nextLevel, false);
+    requestAnimationFrame(() => centerOnMarker(selected));
   };
 
   const mapPositionLabel = (marker) => {
@@ -3805,17 +3858,17 @@ async function initPdfLineDiagramMap(root, diagram) {
       return;
     }
     updateMarkerPositions();
-    focusMatch(0, false);
+    focusMatch(0, true);
   };
 
-  zoomOut.addEventListener("click", () => applyLevel(level - 1));
+  zoomOut.addEventListener("click", () => applyLevelAtCurrentMatch(level - 1));
   zoomReset.addEventListener("click", () => {
     applyLevel(minLevel, false);
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
     scheduleRender();
   });
-  zoomIn.addEventListener("click", () => applyLevel(level + 1));
+  zoomIn.addEventListener("click", () => applyLevelAtCurrentMatch(level + 1));
   matchPrevious?.addEventListener("click", () => focusMatch(matchIndex - 1, true));
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => focusMatch(matchIndex, true));
@@ -3824,11 +3877,15 @@ async function initPdfLineDiagramMap(root, diagram) {
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
     const step = event.ctrlKey ? 0.75 : 0.5;
-    const rect = viewport.getBoundingClientRect();
-    applyLevel(level + (direction * step), true, {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
+    if (matches.length) {
+      applyLevelAtCurrentMatch(level + (direction * step));
+    } else {
+      const rect = viewport.getBoundingClientRect();
+      applyLevel(level + (direction * step), true, {
+        x: event.clientX - rect.left,
+        y: event.clientY - rect.top,
+      });
+    }
   }, { passive: false });
 
   let touchGesture = null;
@@ -3859,7 +3916,11 @@ async function initPdfLineDiagramMap(root, diagram) {
       const rect = viewport.getBoundingClientRect();
       const midpointX = ((event.touches[0].clientX + event.touches[1].clientX) / 2) - rect.left;
       const midpointY = ((event.touches[0].clientY + event.touches[1].clientY) / 2) - rect.top;
-      applyLevel(touchGesture.level + levelDelta, true, { x: midpointX, y: midpointY });
+      if (matches.length) {
+        applyLevelAtCurrentMatch(touchGesture.level + levelDelta);
+      } else {
+        applyLevel(touchGesture.level + levelDelta, true, { x: midpointX, y: midpointY });
+      }
       event.preventDefault();
     } else if (touchGesture.type === "pan" && event.touches.length === 1) {
       viewport.scrollLeft = touchGesture.left - (event.touches[0].clientX - touchGesture.x);

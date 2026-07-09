@@ -3541,3 +3541,1348 @@ body {
     padding: 6px 10px;
   }
 }
+
+/* CELL/B2C lookup mobile sheet refinements. */
+.kt-field-screen {
+  --lookup-line-col: clamp(48px, 13%, 72px);
+  --lookup-node-col: minmax(112px, 1.55fr);
+  --lookup-plan-col: clamp(62px, 17%, 78px);
+  --lookup-plan-button-width: 56px;
+  --lookup-plan-button-height: 30px;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  max-width: 900px;
+}
+
+.kt-field-screen.field-record-sheet {
+  max-width: 900px;
+}
+
+.kt-field-screen .field-circuit-table > div,
+.kt-field-screen .cell-circuit-table > div,
+.kt-field-screen .b2c-circuit-table > div {
+  grid-template-columns:
+    clamp(56px, 15%, 78px)
+    var(--lookup-node-col)
+    var(--lookup-line-col)
+    var(--lookup-plan-col);
+}
+
+.kt-field-screen .cell-device-table > div {
+  grid-template-columns:
+    clamp(46px, 11%, 62px)
+    clamp(44px, 10%, 58px)
+    clamp(44px, 10%, 58px)
+    clamp(44px, 10%, 58px)
+    minmax(112px, 1fr)
+    var(--lookup-plan-col);
+}
+
+.kt-field-screen .field-table button {
+  width: var(--lookup-plan-button-width);
+  min-width: var(--lookup-plan-button-width);
+  max-width: var(--lookup-plan-button-width);
+  min-height: var(--lookup-plan-button-height);
+  height: var(--lookup-plan-button-height);
+  padding: 0 8px;
+  box-sizing: border-box;
+  border-radius: 8px;
+  line-height: 1;
+}
+
+.kt-field-screen .field-table span {
+  min-height: var(--lookup-plan-button-height);
+}
+
+@media (max-width: 820px) {
+  .kt-field-screen {
+    --lookup-line-col: clamp(42px, 12.5%, 56px);
+    --lookup-node-col: minmax(104px, 1.7fr);
+    --lookup-plan-col: clamp(58px, 17%, 68px);
+    --lookup-plan-button-width: 52px;
+    --lookup-plan-button-height: 29px;
+  }
+
+  .network-sheet:has(.kt-field-screen) {
+    max-width: 430px;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    max-width: 430px;
+  }
+
+  .kt-field-screen .field-table {
+    width: 100%;
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div {
+    grid-template-columns:
+      clamp(50px, 14%, 60px)
+      var(--lookup-node-col)
+      var(--lookup-line-col)
+      var(--lookup-plan-col);
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    grid-template-columns:
+      44px 42px 42px 42px minmax(96px, 1fr) var(--lookup-plan-col);
+  }
+}
+
+/* Reference-style CELL/B2C result cards. */
+.network-sheet:has(.kt-field-screen) {
+  width: min(100%, 900px);
+}
+
+.kt-field-screen.field-record-sheet {
+  gap: 16px;
+  color: #111;
+}
+
+.kt-info-card {
+  overflow: visible;
+  border: 1px solid #e5eaf1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 18px rgba(21, 32, 48, .08);
+}
+
+.kt-info-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 16px;
+  color: #111;
+  letter-spacing: 0;
+}
+
+.kt-info-card h2::before,
+.kt-field-screen h2::before {
+  content: "";
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #075fc0;
+}
+
+.kt-field-screen .field-table {
+  overflow: hidden;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.kt-field-screen .field-table > div,
+.kt-field-screen .cell-circuit-table > div,
+.kt-field-screen .cell-device-table > div {
+  border-bottom-color: #d9e0ea;
+}
+
+.kt-field-screen .field-table span,
+.kt-field-screen .field-table button {
+  border-right-color: #d9e0ea;
+  background: #fff;
+  color: #111;
+  font-weight: 500;
+}
+
+.kt-field-screen .field-table-head span {
+  min-height: 34px;
+  color: #fff;
+  background: linear-gradient(180deg, #0065cd 0%, #004aa0 100%);
+  font-weight: 900;
+}
+
+.kt-field-screen .field-table button,
+.kt-field-screen .field-table button:disabled,
+.kt-field-screen .field-table button:disabled:hover {
+  border: 1px solid #ff642b;
+  color: #f04d17;
+  background: #fff;
+  box-shadow: none;
+  font-weight: 900;
+  opacity: 1;
+}
+
+.kt-field-screen .field-table button:hover {
+  color: #fff;
+  background: #f04d17;
+}
+
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn {
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ff6d27 0%, #f24910 100%);
+  box-shadow: none;
+}
+
+.kt-diagram-btn.field-line-diagram-btn:hover,
+.kt-save-btn:hover {
+  background: #e8430d;
+}
+
+.kt-station-card {
+  padding-top: 18px;
+}
+
+.kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: 88px;
+  min-width: 88px;
+  min-height: 38px;
+  margin: 0;
+  padding: 0 12px;
+}
+
+.kt-station-card h2 {
+  padding-right: 100px;
+}
+
+.kt-tabs {
+  grid-template-columns: auto auto 1fr;
+  justify-content: start;
+  gap: 18px;
+  margin: 4px 0 12px;
+  color: #23272d;
+  text-align: left;
+}
+
+.kt-tabs span {
+  padding: 0;
+  border-bottom: 0;
+  font-weight: 500;
+}
+
+.kt-tabs .active {
+  color: #111;
+  border-bottom: 0;
+}
+
+.kt-device-table-title {
+  margin: 18px 0 10px;
+  color: #23272d;
+  font-weight: 500;
+}
+
+.kt-hfc-panel {
+  padding: 0;
+  background: transparent;
+}
+
+.kt-device-head .field-action {
+  border-color: #ff642b;
+  color: #f04d17;
+  background: #fff;
+  box-shadow: none;
+}
+
+.kt-device-list {
+  overflow: hidden;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+}
+
+.kt-device-list div {
+  min-height: 34px;
+  gap: 0;
+  border-bottom: 1px solid #d9e0ea;
+}
+
+.kt-device-list div:last-child {
+  border-bottom: 0;
+}
+
+.kt-device-list dt,
+.kt-device-list dd {
+  display: grid;
+  align-items: center;
+  min-height: 34px;
+  padding: 5px 10px;
+}
+
+.kt-device-list dt {
+  justify-content: center;
+  background: #f6f7f9;
+  border-right: 1px solid #d9e0ea;
+}
+
+@media (max-width: 820px) {
+  .network-sheet:has(.kt-field-screen) {
+    max-width: 430px;
+    margin-top: 12px;
+    padding: 0 8px;
+  }
+
+  .kt-info-card {
+    padding: 14px 12px;
+  }
+
+  .kt-field-screen .field-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .cell-device-table > div {
+    min-height: 44px;
+  }
+
+  .kt-field-screen .field-table span {
+    padding: 6px 4px;
+  }
+
+  .kt-field-screen .field-table-head span {
+    min-height: 38px;
+  }
+
+  .kt-field-screen .field-table button {
+    border-radius: 6px;
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    right: 12px;
+    width: 82px;
+    min-width: 82px;
+    min-height: 36px;
+    font-size: 16px;
+  }
+}
+
+/* Exact mobile lookup screen. */
+#userView:has(#resultPanel .kt-field-screen) {
+  background: #fff;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .query-panel {
+  display: none;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) 48px;
+  align-items: center;
+  min-height: 88px;
+  padding: 0 18px;
+  background: linear-gradient(180deg, #0068cf 0%, #00479d 100%);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .08);
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar > div {
+  grid-column: 2;
+  justify-self: center;
+  text-align: center;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar strong {
+  display: none;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar span {
+  font-size: 0;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar span::after {
+  content: "국사 정보";
+  color: #fff;
+  font-size: 29px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .ghost-btn {
+  display: none;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar::before {
+  content: "";
+  justify-self: start;
+  width: 22px;
+  height: 22px;
+  border-left: 5px solid #fff;
+  border-bottom: 5px solid #fff;
+  transform: rotate(45deg);
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar::after {
+  content: "⋮";
+  justify-self: end;
+  color: #fff;
+  font-size: 42px;
+  line-height: .7;
+  font-weight: 900;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 28px 16px 18px;
+  background: #fff;
+}
+
+.kt-field-screen.field-record-sheet {
+  max-width: 860px;
+  gap: 16px;
+  padding: 0;
+  background: transparent;
+}
+
+.kt-info-card {
+  padding: 20px 18px;
+  border: 1px solid #edf0f4;
+  border-radius: 14px;
+  box-shadow: 0 2px 14px rgba(18, 28, 42, .08);
+}
+
+.kt-basic-card {
+  padding: 0 18px;
+}
+
+.kt-basic-table {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.kt-basic-row {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1.7fr) 108px minmax(0, 1fr);
+  min-height: 64px;
+  border-bottom: 1px solid #dfe3e8;
+}
+
+.kt-basic-row:last-child {
+  border-bottom: 0;
+}
+
+.kt-basic-address-row {
+  grid-template-columns: 126px minmax(0, 1fr);
+}
+
+.kt-basic-label,
+.kt-basic-value {
+  display: grid;
+  align-items: center;
+  min-width: 0;
+  padding: 0 22px;
+  color: #111;
+  font-size: 23px;
+  line-height: 1.25;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.kt-basic-label {
+  justify-content: center;
+  background: #f7f8fa;
+  font-weight: 900;
+}
+
+.kt-basic-title {
+  font-weight: 900;
+}
+
+.kt-station-label {
+  border-left: 1px solid #dfe3e8;
+}
+
+.kt-info-card h2 {
+  margin: 0 0 28px;
+  font-size: 29px;
+}
+
+.kt-info-card h2::before,
+.kt-field-screen h2::before {
+  width: 16px;
+  height: 16px;
+  background: #005fc5;
+}
+
+.kt-station-card {
+  padding-top: 28px;
+}
+
+.kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+  top: 28px;
+  right: 24px;
+  width: 162px;
+  min-width: 162px;
+  min-height: 64px;
+  border-radius: 12px;
+  font-size: 28px;
+}
+
+.kt-station-card h2 {
+  padding-right: 180px;
+}
+
+.kt-tabs,
+.kt-device-table-title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  color: #111;
+  font-size: 23px;
+  font-weight: 500;
+}
+
+.kt-tabs::before,
+.kt-device-table-title::before {
+  content: "⌁";
+  color: #818c9d;
+  font-size: 28px;
+  line-height: 1;
+}
+
+.kt-tabs span:not(.active) {
+  display: none;
+}
+
+.kt-field-screen .field-table {
+  border-color: #dbe1e9;
+  border-radius: 10px;
+}
+
+.kt-field-screen .field-circuit-table {
+  margin-bottom: 34px;
+}
+
+.kt-field-screen .field-table > div,
+.kt-field-screen .cell-circuit-table > div,
+.kt-field-screen .cell-device-table > div {
+  min-height: 72px;
+}
+
+.kt-field-screen .field-table span {
+  min-height: 72px;
+  padding: 8px 10px;
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.kt-field-screen .field-table-head span {
+  min-height: 52px;
+  font-size: 23px;
+}
+
+.kt-field-screen .field-table button {
+  width: 98px;
+  min-width: 98px;
+  max-width: 98px;
+  height: 48px;
+  min-height: 48px;
+  border-radius: 8px;
+  font-size: 22px;
+}
+
+.kt-field-screen .field-circuit-table > div,
+.kt-field-screen .cell-circuit-table > div,
+.kt-field-screen .b2c-circuit-table > div {
+  grid-template-columns: minmax(116px, .86fr) minmax(150px, 1.06fr) minmax(86px, .58fr) 136px;
+}
+
+.kt-field-screen .cell-device-table > div {
+  grid-template-columns: minmax(82px, .7fr) minmax(78px, .62fr) minmax(78px, .62fr) minmax(78px, .62fr) minmax(188px, 1.4fr) 130px;
+}
+
+.kt-hfc-card {
+  padding-top: 28px;
+}
+
+.kt-hfc-panel {
+  gap: 24px;
+}
+
+.kt-device-head {
+  margin-bottom: 10px;
+}
+
+.kt-device-head strong {
+  color: #111;
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.kt-device-head strong::before {
+  content: "▣";
+  margin-right: 9px;
+  color: #8793a5;
+  font-size: 22px;
+}
+
+.kt-device-head .field-action {
+  min-width: 140px;
+  min-height: 54px;
+  border-radius: 10px;
+  font-size: 20px;
+  color: #f04d17;
+}
+
+.kt-device-info-table {
+  display: block;
+  overflow: hidden;
+  border: 1px solid #dbe1e9;
+  border-radius: 10px;
+}
+
+.kt-device-info-table .kt-device-info-row {
+  display: grid;
+  grid-template-columns: 126px minmax(0, 1fr) 118px minmax(0, 1fr);
+  gap: 0;
+  min-height: 50px;
+  border-bottom: 1px solid #dbe1e9;
+}
+
+.kt-device-info-table .kt-device-info-row:last-child {
+  border-bottom: 0;
+}
+
+.kt-device-info-table .kt-device-location-row {
+  grid-template-columns: 126px minmax(0, 1fr);
+}
+
+.kt-device-info-table .kt-device-label,
+.kt-device-info-table .kt-device-value {
+  display: grid;
+  align-items: center;
+  min-height: 50px;
+  margin: 0;
+  padding: 6px 18px;
+  border-right: 1px solid #dbe1e9;
+  color: #111;
+  font-size: 20px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  word-break: keep-all;
+}
+
+.kt-device-info-table .kt-device-label {
+  justify-content: center;
+  background: #f7f8fa;
+  font-weight: 900;
+}
+
+.kt-device-info-table .kt-device-value:last-child {
+  border-right: 0;
+}
+
+.kt-status-dot {
+  display: none;
+}
+
+.kt-field-screen .remarks-editor {
+  position: relative;
+  min-height: 224px;
+  border: 1px solid #aeb8c5;
+  border-radius: 10px;
+}
+
+.kt-field-screen .remarks-editor textarea {
+  min-height: 222px;
+  padding: 18px 18px 82px;
+  color: #111;
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.remarks-footer {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.remarks-footer span {
+  color: #70798a;
+  font-size: 18px;
+}
+
+.kt-save-btn {
+  width: 122px;
+  min-height: 60px;
+  margin: 0;
+  border-radius: 8px;
+  font-size: 22px;
+}
+
+@media (max-width: 540px) {
+  #userView:has(#resultPanel .kt-field-screen) > .topbar {
+    min-height: 88px;
+    padding: 0 22px;
+  }
+
+  #userView:has(#resultPanel .kt-field-screen) > .topbar span::after {
+    font-size: 28px;
+  }
+
+  .network-sheet:has(.kt-field-screen) {
+    padding: 28px 16px 18px;
+  }
+
+  .kt-info-card {
+    padding: 20px 18px;
+    border-radius: 14px;
+  }
+
+  .kt-basic-card {
+    padding: 0 18px;
+  }
+
+  .kt-basic-row {
+    grid-template-columns: 126px minmax(0, 1.65fr) 108px minmax(0, 1fr);
+    min-height: 64px;
+  }
+
+  .kt-basic-address-row {
+    grid-template-columns: 126px minmax(0, 1fr);
+  }
+
+  .kt-basic-label,
+  .kt-basic-value {
+    padding: 0 22px;
+    font-size: 22px;
+  }
+
+  .kt-info-card h2 {
+    margin-bottom: 28px;
+    font-size: 29px;
+  }
+
+  .kt-tabs,
+  .kt-device-table-title {
+    font-size: 22px;
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    width: 162px;
+    min-width: 162px;
+    min-height: 64px;
+    font-size: 28px;
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div {
+    grid-template-columns: minmax(108px, .86fr) minmax(150px, 1.12fr) minmax(78px, .52fr) 132px;
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    grid-template-columns: 82px 76px 76px 76px minmax(174px, 1.35fr) 128px;
+  }
+
+  .kt-field-screen .field-table span {
+    font-size: 22px;
+  }
+
+  .kt-field-screen .field-table-head span {
+    font-size: 22px;
+  }
+
+  .kt-field-screen .field-table button {
+    width: 98px;
+    min-width: 98px;
+    max-width: 98px;
+    height: 48px;
+    min-height: 48px;
+    font-size: 22px;
+  }
+
+  .kt-device-info-table .kt-device-info-row {
+    grid-template-columns: 126px minmax(0, 1fr) 118px minmax(0, 1fr);
+  }
+
+  .kt-device-info-table .kt-device-location-row {
+    grid-template-columns: 126px minmax(0, 1fr);
+  }
+
+  .kt-device-info-table .kt-device-label,
+  .kt-device-info-table .kt-device-value {
+    font-size: 20px;
+  }
+}
+
+/* 390-430px phone viewport fit. */
+@media (max-width: 540px) {
+  .network-sheet:has(.kt-field-screen) {
+    max-width: 430px;
+    padding: 28px 16px 18px;
+    overflow-x: hidden;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    max-width: 100%;
+  }
+
+  .kt-info-card {
+    width: 100%;
+    padding: 18px;
+    box-sizing: border-box;
+  }
+
+  .kt-basic-card {
+    padding: 0 10px;
+  }
+
+  .kt-basic-row {
+    grid-template-columns: 62px minmax(0, 1fr) 54px 82px;
+    min-height: 62px;
+  }
+
+  .kt-basic-address-row {
+    grid-template-columns: 62px minmax(0, 1fr);
+  }
+
+  .kt-basic-label,
+  .kt-basic-value {
+    padding: 0 8px;
+    font-size: 14px;
+  }
+
+  .kt-basic-label {
+    padding: 0 3px;
+    white-space: nowrap;
+  }
+
+  .kt-basic-title {
+    font-size: 15px;
+  }
+
+  .kt-info-card h2 {
+    margin-bottom: 22px;
+    font-size: 24px;
+  }
+
+  .kt-info-card h2::before,
+  .kt-field-screen h2::before {
+    width: 12px;
+    height: 12px;
+  }
+
+  .kt-station-card {
+    padding-top: 22px;
+  }
+
+  .kt-station-card h2 {
+    padding-right: 98px;
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    top: 18px;
+    right: 18px;
+    width: 82px;
+    min-width: 82px;
+    min-height: 42px;
+    border-radius: 10px;
+    font-size: 17px;
+  }
+
+  .kt-tabs,
+  .kt-device-table-title {
+    margin-bottom: 14px;
+    font-size: 16px;
+  }
+
+  .kt-tabs::before,
+  .kt-device-table-title::before {
+    font-size: 20px;
+  }
+
+  .kt-field-screen .field-circuit-table {
+    margin-bottom: 30px;
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div {
+    grid-template-columns: 58px minmax(0, 1fr) 54px 52px;
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    grid-template-columns: 44px 42px 42px 42px minmax(0, 1fr) 62px;
+  }
+
+  .kt-field-screen .field-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .cell-device-table > div {
+    min-height: 54px;
+  }
+
+  .kt-field-screen .field-table span {
+    min-height: 54px;
+    padding: 6px 4px;
+    font-size: 14px;
+  }
+
+  .kt-field-screen .field-table-head span {
+    min-height: 40px;
+    font-size: 14px;
+  }
+
+  .kt-field-screen .field-table button {
+    width: 52px;
+    min-width: 52px;
+    max-width: 52px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0;
+    border-radius: 7px;
+    font-size: 14px;
+  }
+
+  .kt-hfc-panel {
+    gap: 20px;
+  }
+
+  .kt-device-head strong {
+    font-size: 18px;
+  }
+
+  .kt-device-head strong::before {
+    font-size: 16px;
+  }
+
+  .kt-device-head .field-action {
+    min-width: 112px;
+    min-height: 42px;
+    border-radius: 8px;
+    font-size: 15px;
+  }
+
+  .kt-device-info-table .kt-device-info-row {
+    grid-template-columns: 64px minmax(0, 1fr) 60px minmax(0, 1fr);
+    min-height: 42px;
+  }
+
+  .kt-device-info-table .kt-device-location-row {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .kt-device-info-table .kt-device-label,
+  .kt-device-info-table .kt-device-value {
+    min-height: 42px;
+    padding: 5px 6px;
+    font-size: 13px;
+  }
+
+  .kt-device-info-table .kt-device-label {
+    white-space: nowrap;
+  }
+
+  .kt-field-screen .remarks-editor {
+    min-height: 190px;
+  }
+
+  .kt-field-screen .remarks-editor textarea {
+    min-height: 188px;
+    padding: 14px 14px 70px;
+    font-size: 15px;
+  }
+
+  .remarks-footer {
+    right: 10px;
+    bottom: 10px;
+    gap: 12px;
+  }
+
+  .remarks-footer span {
+    font-size: 14px;
+  }
+
+  .kt-save-btn {
+    width: 92px;
+    min-height: 46px;
+    font-size: 17px;
+  }
+}
+
+/* Tablet and desktop scaling for the lookup result screen. */
+@media (min-width: 541px) {
+  #userView:has(#resultPanel .kt-field-screen) > .topbar {
+    min-height: clamp(72px, 7vw, 88px);
+    padding: 0 clamp(22px, 3vw, 34px);
+  }
+
+  #userView:has(#resultPanel .kt-field-screen) > .topbar span::after {
+    font-size: clamp(24px, 2.6vw, 31px);
+  }
+
+  .network-sheet:has(.kt-field-screen) {
+    width: min(100%, 980px);
+    max-width: 980px;
+    padding: clamp(22px, 3vw, 38px) clamp(18px, 3vw, 34px) clamp(24px, 3vw, 42px);
+    overflow-x: hidden;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    max-width: 980px;
+    gap: clamp(16px, 1.8vw, 22px);
+  }
+
+  .kt-info-card {
+    width: 100%;
+    box-sizing: border-box;
+    padding: clamp(18px, 2vw, 24px) clamp(18px, 2.2vw, 28px);
+  }
+
+  .kt-basic-card {
+    padding: 0 clamp(14px, 1.8vw, 22px);
+  }
+
+  .kt-basic-row {
+    grid-template-columns: clamp(86px, 12vw, 126px) minmax(0, 1.6fr) clamp(76px, 10vw, 108px) minmax(110px, .9fr);
+    min-height: clamp(52px, 6vw, 64px);
+  }
+
+  .kt-basic-address-row {
+    grid-template-columns: clamp(86px, 12vw, 126px) minmax(0, 1fr);
+  }
+
+  .kt-basic-label,
+  .kt-basic-value {
+    padding: 0 clamp(10px, 1.8vw, 22px);
+    font-size: clamp(16px, 1.8vw, 23px);
+  }
+
+  .kt-basic-label {
+    white-space: nowrap;
+  }
+
+  .kt-info-card h2 {
+    margin-bottom: clamp(18px, 2.8vw, 28px);
+    font-size: clamp(24px, 2.6vw, 31px);
+  }
+
+  .kt-station-card h2 {
+    padding-right: clamp(118px, 18vw, 190px);
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    top: clamp(18px, 2.4vw, 28px);
+    right: clamp(18px, 2.6vw, 28px);
+    width: clamp(104px, 16vw, 162px);
+    min-width: clamp(104px, 16vw, 162px);
+    min-height: clamp(44px, 6vw, 64px);
+    font-size: clamp(18px, 2.3vw, 28px);
+  }
+
+  .kt-tabs,
+  .kt-device-table-title {
+    margin-bottom: clamp(14px, 1.9vw, 18px);
+    font-size: clamp(17px, 1.9vw, 23px);
+  }
+
+  .kt-field-screen .field-circuit-table {
+    margin-bottom: clamp(28px, 3vw, 36px);
+  }
+
+  .kt-field-screen .field-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .cell-device-table > div {
+    min-height: clamp(52px, 6vw, 72px);
+  }
+
+  .kt-field-screen .field-table span {
+    min-height: clamp(52px, 6vw, 72px);
+    padding: clamp(6px, 1vw, 10px);
+    font-size: clamp(16px, 1.85vw, 24px);
+  }
+
+  .kt-field-screen .field-table-head span {
+    min-height: clamp(42px, 5vw, 54px);
+    font-size: clamp(16px, 1.8vw, 23px);
+  }
+
+  .kt-field-screen .field-table button {
+    width: clamp(66px, 9vw, 98px);
+    min-width: clamp(66px, 9vw, 98px);
+    max-width: clamp(66px, 9vw, 98px);
+    height: clamp(34px, 4.6vw, 48px);
+    min-height: clamp(34px, 4.6vw, 48px);
+    font-size: clamp(15px, 1.7vw, 22px);
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div {
+    grid-template-columns: minmax(78px, .72fr) minmax(180px, 1.65fr) minmax(70px, .56fr) clamp(86px, 12vw, 132px);
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    grid-template-columns: minmax(62px, .58fr) minmax(58px, .52fr) minmax(58px, .52fr) minmax(58px, .52fr) minmax(160px, 1.45fr) clamp(86px, 12vw, 128px);
+  }
+
+  .kt-device-head strong {
+    font-size: clamp(18px, 2vw, 24px);
+  }
+
+  .kt-device-head .field-action {
+    min-width: clamp(112px, 14vw, 140px);
+    min-height: clamp(42px, 5vw, 54px);
+    font-size: clamp(15px, 1.7vw, 20px);
+  }
+
+  .kt-device-info-table .kt-device-info-row {
+    grid-template-columns: clamp(86px, 12vw, 126px) minmax(0, 1fr) clamp(78px, 11vw, 118px) minmax(0, 1fr);
+    min-height: clamp(42px, 5vw, 52px);
+  }
+
+  .kt-device-info-table .kt-device-location-row {
+    grid-template-columns: clamp(86px, 12vw, 126px) minmax(0, 1fr);
+  }
+
+  .kt-device-info-table .kt-device-label,
+  .kt-device-info-table .kt-device-value {
+    min-height: clamp(42px, 5vw, 52px);
+    padding: 6px clamp(10px, 1.7vw, 18px);
+    font-size: clamp(15px, 1.55vw, 20px);
+  }
+
+  .kt-device-info-table .kt-device-label {
+    white-space: nowrap;
+  }
+
+  .kt-field-screen .remarks-editor {
+    min-height: clamp(190px, 22vw, 224px);
+  }
+
+  .kt-field-screen .remarks-editor textarea {
+    min-height: clamp(188px, 22vw, 222px);
+    font-size: clamp(15px, 1.55vw, 20px);
+  }
+
+  .kt-save-btn {
+    width: clamp(96px, 12vw, 122px);
+    min-height: clamp(46px, 5.4vw, 60px);
+    font-size: clamp(17px, 1.8vw, 22px);
+  }
+}
+
+@media (min-width: 1180px) {
+  .network-sheet:has(.kt-field-screen) {
+    max-width: 1040px;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    max-width: 1040px;
+  }
+}
+
+/* Comfortable desktop density: keep the mobile-first shape, but avoid oversized PC UI. */
+@media (min-width: 900px) {
+  #userView:has(#resultPanel .kt-field-screen) > .topbar {
+    min-height: 70px;
+  }
+
+  #userView:has(#resultPanel .kt-field-screen) > .topbar span::after {
+    font-size: 25px;
+  }
+
+  .network-sheet:has(.kt-field-screen) {
+    max-width: 860px;
+    padding: 24px 28px 34px;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    max-width: 860px;
+    gap: 16px;
+  }
+
+  .kt-info-card {
+    padding: 18px 20px;
+  }
+
+  .kt-basic-card {
+    padding: 0 16px;
+  }
+
+  .kt-basic-row {
+    grid-template-columns: 96px minmax(0, 1.6fr) 82px minmax(110px, .9fr);
+    min-height: 54px;
+  }
+
+  .kt-basic-address-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .kt-basic-label,
+  .kt-basic-value {
+    padding: 0 14px;
+    font-size: 17px;
+  }
+
+  .kt-info-card h2 {
+    margin-bottom: 18px;
+    font-size: 24px;
+  }
+
+  .kt-info-card h2::before,
+  .kt-field-screen h2::before {
+    width: 12px;
+    height: 12px;
+  }
+
+  .kt-station-card h2 {
+    padding-right: 132px;
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    top: 18px;
+    right: 20px;
+    width: 118px;
+    min-width: 118px;
+    min-height: 44px;
+    border-radius: 10px;
+    font-size: 20px;
+  }
+
+  .kt-tabs,
+  .kt-device-table-title {
+    margin-bottom: 14px;
+    font-size: 18px;
+  }
+
+  .kt-tabs::before,
+  .kt-device-table-title::before {
+    font-size: 21px;
+  }
+
+  .kt-field-screen .field-circuit-table {
+    margin-bottom: 26px;
+  }
+
+  .kt-field-screen .field-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .cell-device-table > div {
+    min-height: 54px;
+  }
+
+  .kt-field-screen .field-table span {
+    min-height: 54px;
+    padding: 6px 8px;
+    font-size: 17px;
+  }
+
+  .kt-field-screen .field-table-head span {
+    min-height: 42px;
+    font-size: 17px;
+  }
+
+  .kt-field-screen .field-table button {
+    width: 74px;
+    min-width: 74px;
+    max-width: 74px;
+    height: 36px;
+    min-height: 36px;
+    border-radius: 8px;
+    font-size: 16px;
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div {
+    grid-template-columns: minmax(92px, .72fr) minmax(210px, 1.7fr) minmax(78px, .58fr) 96px;
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    grid-template-columns: minmax(68px, .58fr) minmax(62px, .52fr) minmax(62px, .52fr) minmax(62px, .52fr) minmax(170px, 1.45fr) 96px;
+  }
+
+  .kt-device-head strong {
+    font-size: 19px;
+  }
+
+  .kt-device-head strong::before {
+    font-size: 17px;
+  }
+
+  .kt-device-head .field-action {
+    min-width: 116px;
+    min-height: 42px;
+    font-size: 16px;
+  }
+
+  .kt-device-info-table .kt-device-info-row {
+    grid-template-columns: 96px minmax(0, 1fr) 88px minmax(0, 1fr);
+    min-height: 44px;
+  }
+
+  .kt-device-info-table .kt-device-location-row {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .kt-device-info-table .kt-device-label,
+  .kt-device-info-table .kt-device-value {
+    min-height: 44px;
+    padding: 6px 12px;
+    font-size: 16px;
+  }
+
+  .kt-field-screen .remarks-editor {
+    min-height: 190px;
+  }
+
+  .kt-field-screen .remarks-editor textarea {
+    min-height: 188px;
+    padding: 14px 14px 68px;
+    font-size: 16px;
+  }
+
+  .remarks-footer span {
+    font-size: 14px;
+  }
+
+  .kt-save-btn {
+    width: 96px;
+    min-height: 46px;
+    font-size: 17px;
+  }
+}
+
+/* Keep the line-diagram viewing frame fixed while zooming the drawing inside it. */
+.line-diagram-sheet .line-diagram-canvas,
+.line-diagram-sheet .uploaded-floor-plan.line-diagram-canvas,
+.line-diagram-sheet .pdf-line-diagram-canvas,
+.line-diagram-sheet .image-line-diagram-canvas {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  height: clamp(420px, 62dvh, 720px) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: auto !important;
+  contain: size layout paint;
+  align-items: initial;
+  justify-items: initial;
+}
+
+.line-diagram-sheet .line-diagram-canvas > .uploaded-excel-plan,
+.line-diagram-sheet .line-diagram-canvas > .uploaded-drawing-plan,
+.line-diagram-sheet .image-line-diagram-canvas > .line-diagram-image-wrap,
+.line-diagram-sheet .pdf-line-diagram-canvas > .line-diagram-pdf-world {
+  max-width: none;
+  max-height: none;
+}
+
+.line-diagram-sheet .line-diagram-canvas .line-diagram-ocr-status {
+  position: sticky;
+  left: 12px;
+  bottom: 10px;
+  z-index: 6;
+  width: max-content;
+  max-width: calc(100% - 24px);
+}
+
+@media (max-width: 820px) {
+  .line-diagram-sheet .line-diagram-canvas,
+  .line-diagram-sheet .uploaded-floor-plan.line-diagram-canvas,
+  .line-diagram-sheet .pdf-line-diagram-canvas,
+  .line-diagram-sheet .image-line-diagram-canvas {
+    height: clamp(340px, 52dvh, 520px) !important;
+  }
+}
