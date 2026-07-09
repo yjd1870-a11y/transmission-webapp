@@ -683,6 +683,11 @@ function logout() {
   showView("loginView");
 }
 
+function showSearchScreen() {
+  showView("userView");
+  renderEmptyResult("셀명 또는 국사명을 입력한 뒤 조회하세요.");
+}
+
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -4373,6 +4378,7 @@ function exportExcel(type) {
 
 function bindEvents() {
   qs("#loginForm").addEventListener("submit", login);
+  qs("#searchBackBtn").addEventListener("click", showSearchScreen);
   qs("#logoutBtn").addEventListener("click", logout);
   qs("#rackLogoutBtn").addEventListener("click", logout);
   qs("#backToResultBtn").addEventListener("click", () => showView("userView"));

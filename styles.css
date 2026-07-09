@@ -3897,13 +3897,49 @@ body {
 }
 
 #userView:has(#resultPanel .kt-field-screen) > .topbar::before {
-  content: "";
+  content: none;
   justify-self: start;
   width: 22px;
   height: 22px;
   border-left: 5px solid #fff;
   border-bottom: 5px solid #fff;
   transform: rotate(45deg);
+}
+
+.topbar-back-btn {
+  display: none;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn {
+  position: relative;
+  z-index: 2;
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  justify-self: start;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: 100%;
+  margin-left: -12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn::before {
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-left: 5px solid #fff;
+  border-bottom: 5px solid #fff;
+  transform: rotate(45deg);
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn:focus-visible {
+  outline: 3px solid rgba(255, 255, 255, .85);
+  outline-offset: -6px;
 }
 
 #userView:has(#resultPanel .kt-field-screen) > .topbar::after {
