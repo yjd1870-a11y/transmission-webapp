@@ -12,7 +12,7 @@
       window.location.replace("http://127.0.0.1:8000/?opened=index-file&refresh=CATV0708");
     }
   </script>
-  <link rel="stylesheet" href="styles.css?v=CATV0709BACK">
+  <link rel="stylesheet" href="styles.css?v=CATV0714PHOTOZOOMBACK">
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -58,14 +58,14 @@
         <div class="query-card">
           <label>
             <span>CELL (셀명)</span>
-            <input id="cellSearch" placeholder="예: A-101">
+            <input id="cellSearch">
           </label>
           <button id="cellSearchBtn" class="primary-btn" type="button">CELL 조회</button>
         </div>
         <div class="query-card">
           <label>
-            <span>B2C (전용선명)</span>
-            <input id="b2cSearch" placeholder="예: G320350 또는 전용선명">
+            <span>B2C (전용선 주소)</span>
+            <input id="b2cSearch">
           </label>
           <button id="b2cSearchBtn" class="primary-btn" type="button">B2C 조회</button>
         </div>
@@ -118,6 +118,7 @@
             <h2>데이터 DB</h2>
             <div class="tool-row">
               <input id="dataFile" type="file" accept=".xlsx,.xls,.csv">
+              <input id="dataSearch" class="admin-search-input" placeholder="키번호 / 셀명 / 국사 / 노드 검색">
               <button id="addDataBtn" class="secondary-btn" type="button">행 추가</button>
               <button id="exportDataBtn" class="secondary-btn" type="button">엑셀 저장</button>
               <button id="clearDataBtn" class="danger-btn" type="button">전체 삭제</button>
@@ -168,6 +169,6 @@
   </main>
 
   <script src="assets/line-diagrams/anseong-vector/manifest-data.js?v=CATV0708ZOOM100"></script>
-  <script src="app.js?v=CATV0709BACK"></script>
+  <script src="app.js?v=CATV0714PHOTOZOOMBACK"></script>
 </body>
 </html>

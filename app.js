@@ -13,18 +13,22 @@ const SHARED_DB_PATH = "assets/shared-db.json";
 const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
 const GITHUB_SHARED_DB_BRANCH = "main";
 let suppressSharedDbDirty = false;
+let mobileExitBackAt = 0;
+let mobileExitBackTimer = null;
+let activePhotoLightboxClose = null;
 
 const userColumns = ["id", "password", "name", "role"];
 const recordColumns = [
-  "cellName", "stationName", "stationAddress", "otxMain", "otxLine", "orxMain", "orxLine", "backup", "backupLine",
+  "keyNumber", "cellName", "stationName", "stationAddress", "otxMain", "otxLine", "orxMain", "orxLine", "backup", "backupLine",
   "otxRack", "otxShelf", "otxPort", "otxModel", "orxRack", "orxShelf", "orxPort", "orxModel", "onuLocation", "onuPhoto",
-  "onuPhotos", "onuMap", "onuMaker", "onuModel", "onuSplit", "onuCellConfig",
-  "upsLocation", "upsPhoto", "upsPhotos", "upsMap", "upsMaker", "upsModel", "remarks",
+  "onuPhotos", "onuMaker", "onuModel", "onuSplit", "onuCellConfig",
+  "upsLocation", "upsPhoto", "upsPhotos", "upsMaker", "upsModel", "remarks",
 ];
 
 const columnLabels = {
   id: "아이디",  name: "이름",
   role: "권한",
+  keyNumber: "키번호",
   cellName: "셀명",
   stationName: "국사명",
   stationAddress: "국사주소",
@@ -45,7 +49,6 @@ const columnLabels = {
   onuLocation: "ONU 위치",
   onuPhoto: "ONU 현장사진",
   onuPhotos: "ONU 현장사진목록",
-  onuMap: "ONU 지도이동",
   onuMaker: "ONU 제조사",
   onuModel: "ONU 모델명",
   onuSplit: "ONU 분할구분",
@@ -53,13 +56,13 @@ const columnLabels = {
   upsLocation: "UPS 위치",
   upsPhoto: "UPS 현장사진",
   upsPhotos: "UPS 현장사진목록",
-  upsMap: "UPS 지도이동",
   upsMaker: "UPS 제조사",
   upsModel: "UPS 모델명",
   remarks: "비고",
 };
 
 const importColumnAliases = {
+  keyNumber: ["키 번호", "키번호(숫자)", "KEY", "Key", "key", "번호", "A열"],
   otxMain: ["OTX (주)", "OTX 노드"],
   otxLine: ["OTX 선번", "OTX (주)"],
   orxMain: ["ORX (주)", "ORX 노드"],
@@ -651,7 +654,7 @@ function normalizeRecord(record) {
 }
 
 function showView(viewId) {
-  ["loginView", "userView", "adminView"].forEach((id) => qs(`#${id}`).classList.add("hidden"));
+  ["loginView", "userView", "rackView", "adminView"].forEach((id) => qs(`#${id}`).classList.add("hidden"));
   qs(`#${viewId}`).classList.remove("hidden");
 }
 
@@ -675,7 +678,7 @@ function login(event) {
     return;
   }
 
-  renderEmptyResult("셀명 또는 국사명을 입력한 뒤 조회하세요.");
+  renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
   showView("userView");
 }
 
@@ -685,7 +688,7 @@ function logout() {
 
 function showSearchScreen() {
   showView("userView");
-  renderEmptyResult("셀명 또는 국사명을 입력한 뒤 조회하세요.");
+  renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
 }
 
 function normalize(value) {
@@ -735,7 +738,7 @@ function searchRecords() {
 function searchB2CLines() {
   const query = normalize(qs("#b2cSearch").value);
   if (!query) {
-    renderEmptyResult("B2C(전용선명)을 입력해주세요.");
+    renderEmptyResult("B2C(전용선 주소)를 입력해주세요.");
     return;
   }
 
@@ -818,6 +821,19 @@ function stationAddressForB2C(stationName) {
   return station?.stationAddress || "";
 }
 
+function b2cLineDiagramRecord(record, stationAddress = "") {
+  return {
+    stationName: record.stationName,
+    stationAddress,
+    cellName: record.cellName || record.serviceName || record.b2cName,
+    b2cName: record.b2cName,
+    serviceName: record.serviceName,
+    memo: record.memo,
+    otxMain: record.node,
+    otxLine: record.line,
+  };
+}
+
 function renderB2CRecord(record) {
   const stationAddress = record.stationAddress || stationAddressForB2C(record.stationName);
   qs("#resultPanel").innerHTML = `
@@ -846,21 +862,43 @@ function renderB2CRecord(record) {
           <strong>B2C : ${escapeHtml(record.serviceName || record.b2cName || "-")}</strong>
           <span>비고: ${escapeHtml(record.memo || "-")}</span>
         </div>
+        <form class="b2c-remark-diagram-search" data-b2c-remark-search>
+          <label for="b2cRemarkDiagramQuery">비고 글자로 직선도 검색</label>
+          <div class="b2c-remark-diagram-controls">
+            <input id="b2cRemarkDiagramQuery" type="search" placeholder="비고에서 6글자 이상 입력" autocomplete="off">
+            <button type="submit">직선도 바로이동</button>
+          </div>
+          <p class="b2c-remark-diagram-message" data-b2c-remark-message aria-live="polite"></p>
+        </form>
       </article>
     </section>
   `;
 
   qs("#resultPanel").querySelector("[data-b2c-line-diagram]")?.addEventListener("click", () => {
-    renderHfcLineDiagram({
-      stationName: record.stationName,
-      stationAddress,
-      cellName: record.cellName || record.serviceName || record.b2cName,
-      b2cName: record.b2cName,
-      serviceName: record.serviceName,
-      memo: record.memo,
-      otxMain: record.node,
-      otxLine: record.line,
-    }, "b2c");
+    renderHfcLineDiagram(b2cLineDiagramRecord(record, stationAddress), "b2c");
+  });
+  qs("#resultPanel").querySelector("[data-b2c-remark-search]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const input = form.querySelector("input");
+    const button = form.querySelector("button");
+    const message = form.querySelector("[data-b2c-remark-message]");
+    const query = String(input?.value || "").trim();
+    if (!continuousMatchTokens(query).length) {
+      message.textContent = "직선도에서 찾을 글자를 공백 없이 6글자 이상 입력해주세요.";
+      input?.focus();
+      return;
+    }
+    message.textContent = "입력한 글자의 직선도 위치를 찾는 중입니다.";
+    button.disabled = true;
+    try {
+      await renderHfcLineDiagram(b2cLineDiagramRecord(record, stationAddress), "b2c", query);
+    } catch (error) {
+      console.error("비고 글자 직선도 조회 실패", error);
+      if (message.isConnected) message.textContent = "직선도 검색 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+    } finally {
+      if (button.isConnected) button.disabled = false;
+    }
   });
   qs("#resultPanel").querySelector("[data-b2c-node-plan]")?.addEventListener("click", () => {
     renderNodePlanOverview({
@@ -1019,7 +1057,7 @@ function renderRecordEnhanced(record) {
         <span class="kt-status-dot" aria-hidden="true"></span>
         <div class="remarks-editor">
           <textarea id="remarksEditor" maxlength="1000" placeholder="비고를 입력해주세요.." aria-label="비고">${escapeHtml(record.remarks)}</textarea>
-          <div class="remarks-footer"><span id="remarksCounter">${String(record.remarks || "").length} / 1000</span><button id="saveRemarksBtn" type="button" class="kt-save-btn"><span aria-hidden="true">▣</span> 저장</button></div>
+          <div class="remarks-footer"><span id="remarksCounter">${String(record.remarks || "").length} / 1000</span><button id="saveRemarksBtn" type="button" class="kt-save-btn">저장</button></div>
         </div>
       </article>
     </section>`;
@@ -1133,13 +1171,16 @@ function openPhotoGallery(record, type) {
   modal.innerHTML = `<div class="photo-gallery-dialog" role="dialog" aria-modal="true" aria-label="${label} 현장사진">
     <div class="photo-gallery-head"><strong>${label} 현장사진</strong><button type="button" data-close-gallery>닫기</button></div>
     <div class="photo-gallery-slots">${Array.from({ length: 3 }, (_, index) => photos[index]
-      ? `<figure><img src="${photos[index]}" alt="${label} 현장사진 ${index + 1}"><figcaption><span class="photo-slot-title">${index + 1}번 사진</span><label class="photo-action-btn">수정<input type="file" accept="image/*" data-replace-photo="${index}"></label><button class="photo-action-btn" type="button" data-gallery-delete="${index}">삭제</button></figcaption></figure>`
+      ? `<figure><button class="photo-preview-button" type="button" data-photo-zoom="${index}" aria-label="${label} 현장사진 ${index + 1} 확대"><img src="${photos[index]}" alt="${label} 현장사진 ${index + 1}"></button><figcaption><span class="photo-slot-title">${index + 1}번 사진</span><label class="photo-action-btn">수정<input type="file" accept="image/*" data-replace-photo="${index}"></label><button class="photo-action-btn" type="button" data-gallery-delete="${index}">삭제</button></figcaption></figure>`
       : `<div class="photo-gallery-empty"><span>${index + 1}번 사진</span><em>등록된 사진 없음</em></div>`).join("")}</div>
     <div class="photo-gallery-actions"><label class="field-action">등록 <input type="file" accept="image/*" multiple data-gallery-add></label><span>${photos.length}/3장 등록됨</span></div>
   </div>`;
   document.body.append(modal);
   modal.querySelector("[data-close-gallery]").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
+  modal.querySelectorAll("[data-photo-zoom]").forEach((button) => button.addEventListener("click", () => {
+    openPhotoLightbox(photos, Number(button.dataset.photoZoom), label);
+  }));
   modal.querySelector("[data-gallery-add]").addEventListener("change", async (event) => {
     const currentRecord = latestRecordSnapshot(snapshot);
     const currentPhotos = readPhotoList(currentRecord, type);
@@ -1167,6 +1208,162 @@ function openPhotoGallery(record, type) {
     next.splice(Number(button.dataset.galleryDelete), 1);
     await savePhotoListAndRefresh(currentRecord, type, next);
   }));
+}
+
+function closePhotoLightbox() {
+  if (activePhotoLightboxClose) {
+    const close = activePhotoLightboxClose;
+    activePhotoLightboxClose = null;
+    close();
+    return;
+  }
+  qs("#photoLightbox")?.remove();
+  document.body.classList.remove("photo-lightbox-open");
+}
+
+function openPhotoLightbox(photos, startIndex, label) {
+  closePhotoLightbox();
+  if (!photos.length) return;
+  let currentIndex = Math.min(Math.max(0, Number(startIndex) || 0), photos.length - 1);
+  const lightbox = document.createElement("section");
+  lightbox.id = "photoLightbox";
+  lightbox.className = "photo-lightbox";
+  lightbox.innerHTML = `
+    <div class="photo-lightbox-dialog" role="dialog" aria-modal="true" aria-label="${label} 현장사진 확대 보기">
+      <div class="photo-lightbox-head">
+        <strong>${label} 현장사진</strong>
+        <span data-photo-lightbox-counter></span>
+        <button type="button" data-close-photo-lightbox aria-label="확대 사진 닫기">×</button>
+      </div>
+      <div class="photo-lightbox-stage">
+        <button type="button" data-photo-lightbox-prev aria-label="이전 사진">‹</button>
+        <img alt="${label} 현장사진 확대">
+        <button type="button" data-photo-lightbox-next aria-label="다음 사진">›</button>
+      </div>
+    </div>`;
+  document.body.append(lightbox);
+  document.body.classList.add("photo-lightbox-open");
+  const image = lightbox.querySelector("img");
+  const counter = lightbox.querySelector("[data-photo-lightbox-counter]");
+  const previous = lightbox.querySelector("[data-photo-lightbox-prev]");
+  const next = lightbox.querySelector("[data-photo-lightbox-next]");
+  const render = () => {
+    image.src = photos[currentIndex];
+    image.alt = `${label} 현장사진 ${currentIndex + 1} 확대`;
+    counter.textContent = `${currentIndex + 1} / ${photos.length}`;
+    previous.disabled = photos.length < 2;
+    next.disabled = photos.length < 2;
+  };
+  const close = () => {
+    document.removeEventListener("keydown", handleKeydown);
+    lightbox.remove();
+    document.body.classList.remove("photo-lightbox-open");
+    if (activePhotoLightboxClose === close) activePhotoLightboxClose = null;
+  };
+  const move = (offset) => {
+    currentIndex = (currentIndex + offset + photos.length) % photos.length;
+    render();
+  };
+  const handleKeydown = (event) => {
+    if (event.key === "Escape") close();
+    if (event.key === "ArrowLeft") move(-1);
+    if (event.key === "ArrowRight") move(1);
+  };
+  lightbox.querySelector("[data-close-photo-lightbox]").addEventListener("click", close);
+  previous.addEventListener("click", () => move(-1));
+  next.addEventListener("click", () => move(1));
+  lightbox.addEventListener("click", (event) => { if (event.target === lightbox) close(); });
+  document.addEventListener("keydown", handleKeydown);
+  activePhotoLightboxClose = close;
+  render();
+}
+
+function isMobileBackMode() {
+  return window.matchMedia("(max-width: 820px)").matches || navigator.maxTouchPoints > 0;
+}
+
+function dismissMobileExitToast() {
+  clearTimeout(mobileExitBackTimer);
+  mobileExitBackTimer = null;
+  qs("#mobileExitToast")?.classList.remove("visible");
+}
+
+function showMobileExitToast() {
+  let toast = qs("#mobileExitToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "mobileExitToast";
+    toast.className = "mobile-exit-toast";
+    toast.setAttribute("role", "status");
+    toast.textContent = "한 번 더 누르면 종료됩니다.";
+    document.body.append(toast);
+  }
+  toast.classList.add("visible");
+  clearTimeout(mobileExitBackTimer);
+  mobileExitBackTimer = setTimeout(() => {
+    mobileExitBackAt = 0;
+    toast.classList.remove("visible");
+  }, 2000);
+}
+
+function restoreMobileBackGuard() {
+  window.history.pushState({ ...(window.history.state || {}), catvBackGuard: true }, "", window.location.href);
+}
+
+function handleMobileBack() {
+  if (!isMobileBackMode()) return;
+  dismissMobileExitToast();
+  if (qs("#photoLightbox")) {
+    mobileExitBackAt = 0;
+    closePhotoLightbox();
+    restoreMobileBackGuard();
+    return;
+  }
+  if (qs("#photoGalleryModal")) {
+    mobileExitBackAt = 0;
+    qs("#photoGalleryModal").remove();
+    restoreMobileBackGuard();
+    return;
+  }
+  if (!qs("#rackView").classList.contains("hidden")) {
+    mobileExitBackAt = 0;
+    showView("userView");
+    restoreMobileBackGuard();
+    return;
+  }
+  if (!qs("#userView").classList.contains("hidden") && qs("#resultPanel .kt-field-screen, #resultPanel .search-match-panel")) {
+    mobileExitBackAt = 0;
+    showSearchScreen();
+    restoreMobileBackGuard();
+    return;
+  }
+  if (!qs("#adminView").classList.contains("hidden")) {
+    mobileExitBackAt = 0;
+    showView("loginView");
+    restoreMobileBackGuard();
+    return;
+  }
+  const now = Date.now();
+  if (mobileExitBackAt && now - mobileExitBackAt <= 2000) {
+    mobileExitBackAt = 0;
+    window.history.back();
+    return;
+  }
+  mobileExitBackAt = now;
+  showMobileExitToast();
+  restoreMobileBackGuard();
+}
+
+function installMobileBackHandler() {
+  if (!isMobileBackMode()) return;
+  window.history.replaceState({ ...(window.history.state || {}), catvAppEntry: true }, "", window.location.href);
+  restoreMobileBackGuard();
+  window.addEventListener("popstate", handleMobileBack);
+  document.addEventListener("pointerdown", () => {
+    if (!qs("#mobileExitToast.visible")) return;
+    mobileExitBackAt = 0;
+    dismissMobileExitToast();
+  }, { passive: true });
 }
 
 function renderRecord(record) {
@@ -1274,6 +1471,7 @@ function renderNodePlanOverview(record, nodeValue, equipmentName) {
   `;
   applyRegisteredFloorPlan(record, { rack: "", shelf: "", port: "" }, label, node);
   showView("rackView");
+  resetFloorPlanOverview();
 }
 
 function renderRackOverview(record, equipment) {
@@ -1361,6 +1559,7 @@ function renderRackOverview(record, equipment) {
   }
   qs("#rackView .topbar span").textContent = "평면도";
   showView("rackView");
+  resetFloorPlanOverview();
 }
 
 function renderRackDetail(record, equipment) {
@@ -2015,10 +2214,11 @@ async function extractSheetImages(zip, sheetPath) {
 }
 
 const DRAWING_EMU_PER_PIXEL = 9525;
-const DRAWING_MAX_WIDTH = 12000;
 const DRAWING_EMU_PER_POINT = 12700;
 const DRAWING_DEFAULT_COLUMN_WIDTH = 8.43;
 const DRAWING_DEFAULT_ROW_HEIGHT = 15;
+const DRAWING_CROP_MIN_PADDING = DRAWING_EMU_PER_PIXEL * 8;
+const DRAWING_CROP_PADDING_RATIO = 0.006;
 
 function drawingChild(node, localName) {
   return [...(node?.childNodes || [])].find((child) => child.nodeType === 1 && child.localName === localName) || null;
@@ -2172,17 +2372,23 @@ function drawingAnchorBounds(anchor, metrics) {
 
 function drawingEffectiveXfrm(node, isGroup = false, anchorBounds = null) {
   const xfrm = drawingXfrm(node, isGroup);
-  if (!xfrm) return null;
+  if (xfrm) return xfrm;
   if (anchorBounds) {
     return {
-      ...xfrm,
       x: anchorBounds.x,
       y: anchorBounds.y,
       width: anchorBounds.width,
       height: anchorBounds.height,
+      childX: 0,
+      childY: 0,
+      childWidth: anchorBounds.width,
+      childHeight: anchorBounds.height,
+      rotation: 0,
+      flipH: false,
+      flipV: false,
     };
   }
-  return xfrm;
+  return null;
 }
 
 function drawingTransformPoint(transform, x, y) {
@@ -2334,45 +2540,100 @@ function drawingCustomGeometryPath(node, xfrm) {
   if (!paths.length) return "";
 
   const guideValues = new Map();
-  xmlElements(customGeometry, "gd").forEach((guide) => {
-    const name = guide.getAttribute("name");
-    const match = String(guide.getAttribute("fmla") || "").match(/-?\d+(?:\.\d+)?/);
-    if (name && match) guideValues.set(name, Number(match[0]));
-  });
-  const rawValue = (value) => {
+
+  const baseValue = (value, width = 21600, height = 21600) => {
     if (value === undefined || value === null || value === "") return 0;
     if (guideValues.has(value)) return guideValues.get(value);
+    const keyword = String(value).trim();
+    if (keyword === "l" || keyword === "t") return 0;
+    if (keyword === "r" || keyword === "w") return width;
+    if (keyword === "b" || keyword === "h") return height;
+    if (keyword === "hc") return width / 2;
+    if (keyword === "vc") return height / 2;
+    if (/^wd\d+$/i.test(keyword)) return width / Math.max(1, Number(keyword.slice(2)));
+    if (/^hd\d+$/i.test(keyword)) return height / Math.max(1, Number(keyword.slice(2)));
+    if (keyword === "ss") return Math.min(width, height);
+    if (keyword === "ls") return Math.max(width, height);
     const number = Number(value);
     return Number.isFinite(number) ? number : 0;
   };
-  const pointOf = (point, scaleX, scaleY) => ({
-    x: xfrm.x + (rawValue(point?.getAttribute("x")) * scaleX),
-    y: xfrm.y + (rawValue(point?.getAttribute("y")) * scaleY),
-  });
 
-  return paths.map((pathNode) => {
+  const formulaValue = (formula, width = 21600, height = 21600) => {
+    const parts = String(formula || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return 0;
+    const valueOf = (token) => baseValue(token, width, height);
+    const [op, a, b, c] = parts;
+    if (op === "val") return valueOf(a);
+    if (op === "+-") return valueOf(a) + valueOf(b) - valueOf(c);
+    if (op === "+/") return (valueOf(a) + valueOf(b)) / Math.max(1, valueOf(c));
+    if (op === "*/") return (valueOf(a) * valueOf(b)) / Math.max(1, valueOf(c));
+    if (op === "abs") return Math.abs(valueOf(a));
+    if (op === "max") return Math.max(valueOf(a), valueOf(b));
+    if (op === "min") return Math.min(valueOf(a), valueOf(b));
+    if (op === "mod") return Math.hypot(valueOf(a), valueOf(b), valueOf(c));
+    if (op === "pin") return Math.min(Math.max(valueOf(b), valueOf(a)), valueOf(c));
+    if (op === "?:") return valueOf(a) > 0 ? valueOf(b) : valueOf(c);
+    const direct = Number(op);
+    return Number.isFinite(direct) ? direct : 0;
+  };
+
+  const buildGuidesForPath = (width, height) => {
+    guideValues.clear();
+    xmlElements(customGeometry, "gd").forEach((guide) => {
+      const name = guide.getAttribute("name");
+      if (!name) return;
+      guideValues.set(name, formulaValue(guide.getAttribute("fmla"), width, height));
+    });
+  };
+
+  const pathWithinShape = (points) => {
+    if (!points.length) return true;
+    const minX = Math.min(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const maxY = Math.max(...points.map((point) => point.y));
+    const toleranceX = Math.max(DRAWING_EMU_PER_PIXEL * 16, xfrm.width * 0.2);
+    const toleranceY = Math.max(DRAWING_EMU_PER_PIXEL * 16, xfrm.height * 0.2);
+    return minX >= xfrm.x - toleranceX
+      && minY >= xfrm.y - toleranceY
+      && maxX <= xfrm.x + xfrm.width + toleranceX
+      && maxY <= xfrm.y + xfrm.height + toleranceY;
+  };
+
+  const renderedPaths = paths.map((pathNode) => {
     const pathWidth = Math.max(1, drawingNumber(pathNode, "w", 21600));
     const pathHeight = Math.max(1, drawingNumber(pathNode, "h", 21600));
+    buildGuidesForPath(pathWidth, pathHeight);
     const scaleX = xfrm.width / pathWidth;
     const scaleY = xfrm.height / pathHeight;
+    const rawValue = (value) => baseValue(value, pathWidth, pathHeight);
+    const visitedPoints = [];
+    const pointOf = (point) => {
+      const next = {
+        x: xfrm.x + (rawValue(point?.getAttribute("x")) * scaleX),
+        y: xfrm.y + (rawValue(point?.getAttribute("y")) * scaleY),
+      };
+      visitedPoints.push(next);
+      return next;
+    };
     let current = { x: xfrm.x, y: xfrm.y };
     const commands = [];
     [...pathNode.childNodes].filter((child) => child.nodeType === 1).forEach((command) => {
       const points = [...command.childNodes].filter((child) => child.nodeType === 1 && child.localName === "pt");
       if (command.localName === "moveTo" && points[0]) {
-        current = pointOf(points[0], scaleX, scaleY);
+        current = pointOf(points[0]);
         commands.push(`M ${current.x} ${current.y}`);
       } else if (command.localName === "lnTo" && points[0]) {
-        current = pointOf(points[0], scaleX, scaleY);
+        current = pointOf(points[0]);
         commands.push(`L ${current.x} ${current.y}`);
       } else if (command.localName === "quadBezTo" && points.length >= 2) {
-        const control = pointOf(points[0], scaleX, scaleY);
-        current = pointOf(points[1], scaleX, scaleY);
+        const control = pointOf(points[0]);
+        current = pointOf(points[1]);
         commands.push(`Q ${control.x} ${control.y} ${current.x} ${current.y}`);
       } else if (command.localName === "cubicBezTo" && points.length >= 3) {
-        const first = pointOf(points[0], scaleX, scaleY);
-        const second = pointOf(points[1], scaleX, scaleY);
-        current = pointOf(points[2], scaleX, scaleY);
+        const first = pointOf(points[0]);
+        const second = pointOf(points[1]);
+        current = pointOf(points[2]);
         commands.push(`C ${first.x} ${first.y} ${second.x} ${second.y} ${current.x} ${current.y}`);
       } else if (command.localName === "arcTo") {
         const widthRadius = Math.max(1, rawValue(command.getAttribute("wR")) * scaleX);
@@ -2385,12 +2646,15 @@ function drawingCustomGeometryPath(node, xfrm) {
         };
         commands.push(`A ${widthRadius} ${heightRadius} 0 ${Math.abs(swing) > 10800000 ? 1 : 0} ${swing >= 0 ? 1 : 0} ${end.x} ${end.y}`);
         current = end;
+        visitedPoints.push(end);
       } else if (command.localName === "close") {
         commands.push("Z");
       }
     });
+    if (!pathWithinShape(visitedPoints)) return "";
     return commands.join(" ");
-  }).filter(Boolean).join(" ");
+  }).filter(Boolean);
+  return renderedPaths.length === paths.length ? renderedPaths.join(" ") : "";
 }
 
 function drawingBounds(transform, xfrm) {
@@ -2445,6 +2709,71 @@ function collectDrawingItems(node, transform, imageByRelationship, items) {
     text,
     rotation: text && Math.abs((((xfrm.rotation % 360) + 360) % 360) - 180) < 1 ? 0 : xfrm.rotation,
   });
+}
+
+function drawingPaintVisible(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return Boolean(normalized && normalized !== "none" && normalized !== "transparent");
+}
+
+function drawingWhitePaint(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  return normalized === "#fff" || normalized === "#ffffff" || normalized === "white" || normalized === "rgb(255,255,255)";
+}
+
+function drawingVisibleStyle(node) {
+  if (node.localName === "pic") return { visible: true, strokeWidth: 1 };
+
+  const style = drawingShapeStyle(node);
+  const text = drawingShapeText(node);
+  const hasText = Boolean(text.trim());
+  const hasFill = drawingPaintVisible(style.fill);
+  const hasStroke = drawingPaintVisible(style.stroke) && Number(style.strokeWidth) > 0;
+  const lineLike = node.localName === "cxnSp" || /connector|^line$/i.test(style.geometry);
+  const onlyWhiteBackground = hasFill && !hasStroke && !hasText && drawingWhitePaint(style.fill);
+
+  return {
+    visible: !onlyWhiteBackground && (hasText || hasStroke || (!lineLike && hasFill)),
+    strokeWidth: style.strokeWidth,
+  };
+}
+
+function drawingPaddedBounds(bounds, strokeWidth = 1) {
+  const strokePadding = Math.max(DRAWING_EMU_PER_PIXEL * 3, Number(strokeWidth || 0) * DRAWING_EMU_PER_PIXEL * 3);
+  return {
+    minX: bounds.x - strokePadding,
+    minY: bounds.y - strokePadding,
+    maxX: bounds.x + bounds.width + strokePadding,
+    maxY: bounds.y + bounds.height + strokePadding,
+  };
+}
+
+function collectDrawingVisibleBounds(node, transform, imageByRelationship, boundsList, anchorBounds = null) {
+  if (!node || node.nodeType !== 1) return;
+  if (node.localName === "grpSp") {
+    const xfrm = drawingEffectiveXfrm(node, true, anchorBounds);
+    if (!xfrm) return;
+    const groupTransform = drawingGroupTransform(transform, xfrm);
+    [...node.childNodes]
+      .filter((child) => child.nodeType === 1 && ["sp", "cxnSp", "grpSp", "pic"].includes(child.localName))
+      .forEach((child) => collectDrawingVisibleBounds(child, groupTransform, imageByRelationship, boundsList));
+    return;
+  }
+
+  const xfrm = drawingEffectiveXfrm(node, false, anchorBounds);
+  const bounds = drawingBounds(transform, xfrm);
+  if (!bounds) return;
+
+  if (node.localName === "pic") {
+    const blip = xmlElements(node, "blip")[0];
+    const relationshipId = blip?.getAttribute("r:embed") || blip?.getAttribute("embed");
+    if (imageByRelationship[relationshipId]) boundsList.push(drawingPaddedBounds(bounds, 1));
+    return;
+  }
+
+  const visibleStyle = drawingVisibleStyle(node);
+  if (!visibleStyle.visible) return;
+  boundsList.push(drawingPaddedBounds(bounds, visibleStyle.strokeWidth));
 }
 
 function drawingSvgMatrixMultiply(left, right) {
@@ -2529,9 +2858,8 @@ function drawingSvgGeometry(node, xfrm, shapeStyle) {
   const dashArray = shapeStyle.dashPattern
     ? ` stroke-dasharray="${shapeStyle.dashPattern.map((part) => Math.round(part * strokeWidth)).join(" ")}"`
     : "";
-  const bleedFill = shapeStyle.hasCustomGeometry && /^#(?:ffcc66|ffc000|ffd966)$/i.test(shapeStyle.fill || "");
-  const fill = bleedFill ? "transparent" : shapeStyle.fill;
-  const common = `fill="${fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}"${dashArray}`;
+  const common = `fill="${shapeStyle.fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}" stroke-linecap="butt" stroke-linejoin="miter"${dashArray}`;
+  const lineCommon = `${common} vector-effect="non-scaling-stroke"`;
   const geometry = String(shapeStyle.geometry || "rect");
   const customPath = drawingCustomGeometryPath(node, xfrm);
   if (customPath) {
@@ -2558,7 +2886,7 @@ function drawingSvgGeometry(node, xfrm, shapeStyle) {
     const headType = drawingChild(line, "headEnd")?.getAttribute("type");
     const tailType = drawingChild(line, "tailEnd")?.getAttribute("type");
     const markers = `${headType && headType !== "none" ? ' marker-start="url(#diagramArrowStart)"' : ""}${tailType && tailType !== "none" ? ' marker-end="url(#diagramArrowEnd)"' : ""}`;
-    return `<path d="${path}" ${common} fill="none"${markers}/>`;
+    return `<path d="${path}" ${lineCommon} fill="none"${markers}/>`;
   }
   if (/ellipse|arc/i.test(geometry)) {
     return `<ellipse cx="${x + (width / 2)}" cy="${y + (height / 2)}" rx="${width / 2}" ry="${height / 2}" ${common}/>`;
@@ -2643,14 +2971,14 @@ function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
 
   const xfrm = drawingEffectiveXfrm(node, false, anchorBounds);
   if (!xfrm) return "";
-  const transform = drawingSvgMatrixAttribute(drawingSvgAroundCenter(xfrm));
+  const nodeTransform = drawingSvgMatrixAttribute(drawingSvgAroundCenter(xfrm));
   if (node.localName === "pic") {
     const blip = xmlElements(node, "blip")[0];
     const relationshipId = blip?.getAttribute("r:embed") || blip?.getAttribute("embed");
     const source = imageByRelationship[relationshipId];
     if (!source) return "";
     stats.pictureCount += 1;
-    return `<g transform="${transform}"><image x="${xfrm.x}" y="${xfrm.y}" width="${xfrm.width}" height="${xfrm.height}" href="${source}" preserveAspectRatio="none"/></g>`;
+    return `<g transform="${nodeTransform}"><image x="${xfrm.x}" y="${xfrm.y}" width="${xfrm.width}" height="${xfrm.height}" href="${source}" preserveAspectRatio="none"/></g>`;
   }
 
   const text = drawingShapeText(node);
@@ -2660,7 +2988,7 @@ function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
   if (text) stats.texts.push(text);
   const textSvg = drawingSvgText(node, xfrm, shapeStyle);
   const textCorrection = textSvg ? drawingSvgTextCorrection(xfrm) : "";
-  return `<g transform="${transform}">${shape}${textCorrection ? `<g transform="${textCorrection}">${textSvg}</g>` : textSvg}</g>`;
+  return `<g transform="${nodeTransform}">${shape}${textCorrection ? `<g transform="${textCorrection}">${textSvg}</g>` : textSvg}</g>`;
 }
 
 function drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml = "") {
@@ -2679,23 +3007,38 @@ function drawingDiagramHtml(drawingXml, imageByRelationship, sheetXml = "") {
     });
   if (!rootItems.length) return null;
 
-  const bounds = rootItems
+  const visibleBounds = [];
+  const identityTransform = { x: 0, y: 0, scaleX: 1, scaleY: 1 };
+  rootItems.forEach(({ node, anchorBounds }) => {
+    collectDrawingVisibleBounds(node, identityTransform, imageByRelationship, visibleBounds, anchorBounds);
+  });
+
+  const fallbackBounds = rootItems
     .map(({ node, anchorBounds }) => drawingEffectiveXfrm(node, node.localName === "grpSp", anchorBounds))
-    .filter(Boolean);
-  const minX = Math.min(...bounds.map((item) => item.x));
-  const minY = Math.min(...bounds.map((item) => item.y));
-  const maxX = Math.max(...bounds.map((item) => item.x + item.width));
-  const maxY = Math.max(...bounds.map((item) => item.y + item.height));
+    .filter(Boolean)
+    .map((item) => ({
+      minX: item.x,
+      minY: item.y,
+      maxX: item.x + item.width,
+      maxY: item.y + item.height,
+    }));
+  const bounds = visibleBounds.length ? visibleBounds : fallbackBounds;
+  if (!bounds.length) return null;
+  const minX = Math.min(...bounds.map((item) => item.minX));
+  const minY = Math.min(...bounds.map((item) => item.minY));
+  const maxX = Math.max(...bounds.map((item) => item.maxX));
+  const maxY = Math.max(...bounds.map((item) => item.maxY));
   const rawWidth = Math.max(1, maxX - minX);
   const rawHeight = Math.max(1, maxY - minY);
-  const padding = Math.max(127000, Math.max(rawWidth, rawHeight) * .012);
+  const padding = Math.max(DRAWING_CROP_MIN_PADDING, Math.max(rawWidth, rawHeight) * DRAWING_CROP_PADDING_RATIO);
   const viewX = minX - padding;
   const viewY = minY - padding;
   const viewWidth = rawWidth + (padding * 2);
   const viewHeight = rawHeight + (padding * 2);
-  const naturalPixelWidth = viewWidth / DRAWING_EMU_PER_PIXEL;
-  const displayWidth = Math.round(Math.min(DRAWING_MAX_WIDTH, Math.max(1400, naturalPixelWidth * .8)));
-  const displayHeight = Math.max(480, Math.round(displayWidth * (viewHeight / viewWidth)));
+  const naturalPixelWidth = Math.max(1, viewWidth / DRAWING_EMU_PER_PIXEL);
+  const naturalPixelHeight = Math.max(1, viewHeight / DRAWING_EMU_PER_PIXEL);
+  const displayWidth = Math.round(naturalPixelWidth);
+  const displayHeight = Math.round(naturalPixelHeight);
   const stats = { shapeCount: 0, pictureCount: 0, texts: [] };
   const body = rootItems.map(({ node, anchorBounds }) => drawingSvgNode(node, imageByRelationship, stats, anchorBounds)).join("");
   const svg = `<svg class="drawing-diagram-svg" xmlns="http://www.w3.org/2000/svg" width="${displayWidth}" height="${displayHeight}" data-base-width="${displayWidth}" data-base-height="${displayHeight}" viewBox="${viewX} ${viewY} ${viewWidth} ${viewHeight}" preserveAspectRatio="xMinYMin meet"><defs><marker id="diagramArrowEnd" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="context-stroke"/></marker><marker id="diagramArrowStart" markerWidth="10" markerHeight="7" refX="1" refY="3.5" orient="auto-start-reverse" markerUnits="strokeWidth"><polygon points="0 0, 10 3.5, 0 7" fill="context-stroke"/></marker></defs>${body}</svg>`;
@@ -2768,6 +3111,53 @@ async function drawingDiagramToImageAsset(diagram) {
     };
   } finally {
     host.remove();
+  }
+}
+
+async function excelRenderedLineDiagramImages(file) {
+  if (!file || !/^https?:$/.test(window.location.protocol)) return new Map();
+  const requiresExcelRenderer = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+  try {
+    const response = await fetch("/api/line-diagram-images", {
+      method: "POST",
+      headers: {
+        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "x-file-name": encodeURIComponent(file.name || "workbook.xlsx"),
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      throw new Error(`Excel 직선도 변환 서버 응답 오류 (${response.status})`);
+    }
+    const payload = await response.json();
+    const renderedSheets = payload.sheets || [];
+    if (requiresExcelRenderer && !renderedSheets.length) {
+      throw new Error("Excel 직선도 그림을 한 장도 만들지 못했습니다.");
+    }
+    return new Map(renderedSheets.map((sheet) => [
+      diagramMatchKey(sheet.sheetName),
+      {
+        content: `data:image/png;base64,${sheet.content}`,
+        baseWidth: Number(sheet.width) || 0,
+        baseHeight: Number(sheet.height) || 0,
+        imageFormat: "png",
+        renderer: "excel-picture",
+        searchTargets: (sheet.searchTargets || []).map((target) => ({
+          text: normalizeDiagramSearchText(target.text),
+          label: target.label || target.text || "",
+          left: Number(target.left) || 0,
+          top: Number(target.top) || 0,
+          width: Number(target.width) || 0,
+          height: Number(target.height) || 0,
+        })).filter((target) => target.text.length >= 6 && target.width > 0 && target.height > 0),
+      },
+    ]));
+  } catch (error) {
+    if (requiresExcelRenderer) {
+      throw new Error("직선도 변환 서버에 연결할 수 없습니다. 로컬 사이트 서버를 실행한 뒤 다시 업로드해주세요.", { cause: error });
+    }
+    console.warn("Excel 원본 그림 변환을 사용할 수 없어 브라우저 변환으로 진행합니다.", error);
+    return new Map();
   }
 }
 
@@ -2881,25 +3271,49 @@ async function parseB2CDiagrams(workbook, stationName, fileName, file) {
   const presetDiagrams = await buildPresetLineDiagrams(stationName, fileName, nodeNamesBySheet);
   if (presetDiagrams) return presetDiagrams;
 
+  const diagrams = [];
+  const excelRenderedImages = await excelRenderedLineDiagramImages(file);
+  const diagramSheetNames = workbook.SheetNames.filter((name) => !/선번장|우선순위|^>>$/i.test(name.trim()));
+  const needsBrowserFallback = diagramSheetNames.some((sheetName) => !excelRenderedImages.has(diagramMatchKey(sheetName)));
   let zip = null;
   let sheetPaths = {};
-  try {
-    if (window.JSZip && file) {
-      zip = await JSZip.loadAsync(file);
-    } else {
-      zip = workbookZipAdapter(workbook);
+  if (needsBrowserFallback) {
+    try {
+      if (window.JSZip && file) {
+        zip = await JSZip.loadAsync(file);
+      } else {
+        zip = workbookZipAdapter(workbook);
+      }
+      if (zip) sheetPaths = await workbookSheetPathMap(zip);
+    } catch (error) {
+      console.warn("엑셀 그림 추출 준비 실패", error);
     }
-    if (zip) sheetPaths = await workbookSheetPathMap(zip);
-  } catch (error) {
-    console.warn("엑셀 그림 추출 준비 실패", error);
   }
 
-  const diagrams = [];
-  for (const sheetName of workbook.SheetNames.filter((name) => !/선번장|우선순위|^>>$/i.test(name.trim()))) {
+  for (const sheetName of diagramSheetNames) {
       const rawSheet = workbook.Sheets[sheetName];
       if (!rawSheet) continue;
       const sheetKey = diagramMatchKey(sheetName);
       const nodeName = linebookNodes.find((node) => diagramMatchKey(node) === sheetKey) || "";
+      const excelRenderedImage = excelRenderedImages.get(sheetKey);
+      if (excelRenderedImage) {
+        diagrams.push({
+          stationName,
+          fileName,
+          sheetName,
+          linebookSheetName,
+          nodeName,
+          nodeKey: diagramMatchKey(nodeName || sheetName),
+          type: "image-map",
+          content: excelRenderedImage.content,
+          searchTargets: excelRenderedImage.searchTargets || [],
+          baseWidth: excelRenderedImage.baseWidth,
+          baseHeight: excelRenderedImage.baseHeight,
+          imageFormat: excelRenderedImage.imageFormat,
+          renderer: excelRenderedImage.renderer,
+        });
+        continue;
+      }
       const drawingDiagram = zip && sheetPaths[sheetName]
         ? await extractSheetDrawingDiagram(zip, sheetPaths[sheetName])
         : null;
@@ -2914,10 +3328,11 @@ async function parseB2CDiagrams(workbook, stationName, fileName, file) {
           nodeKey: diagramMatchKey(nodeName || sheetName),
           type: "image-map",
           content: imageAsset.content,
-          searchTargets: imageAsset.searchTargets,
+          searchTargets: imageAsset.searchTargets || [],
           baseWidth: imageAsset.baseWidth,
           baseHeight: imageAsset.baseHeight,
           imageFormat: imageAsset.imageFormat,
+          renderer: "browser-svg",
           shapeCount: drawingDiagram.shapeCount,
           imageCount: drawingDiagram.pictureCount,
         });
@@ -2990,7 +3405,12 @@ function saveB2CFile() {
       if (!parsedRows.length) throw new Error("Q~V열 검색 항목이 있는 전용선 데이터를 찾지 못했습니다.");
 
       localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
-      saveB2CLines([...loadB2CLines(), ...parsedRows]);
+      const remainingLines = loadB2CLines().filter((line) => !(
+        stationKey(line.stationName) === stationKey(stationName)
+        && String(line.fileName || "") === String(file.name || "")
+      ));
+      saveB2CLines([...remainingLines, ...parsedRows]);
+      await deleteB2CDiagramsForSource({ stationName, fileName: file.name });
       await saveB2CDiagramsForStation(stationName, parsedDiagrams, sourceId);
       stationInput.value = "";
       fileInput.value = "";
@@ -3068,6 +3488,7 @@ function initFloorPlanTouchZoom(viewport) {
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
   };
+  viewport.__fitFloorPlanOverview = configure;
 
   const setZoomAt = (nextZoom, clientX, clientY) => {
     const viewportRect = viewport.getBoundingClientRect();
@@ -3143,6 +3564,14 @@ function initFloorPlanTouchZoom(viewport) {
   }, { passive: true });
 }
 
+function resetFloorPlanOverview(viewport = qs("#rackPanel .floor-plan")) {
+  if (!viewport || typeof viewport.__fitFloorPlanOverview !== "function") return;
+  window.requestAnimationFrame(() => {
+    viewport.__fitFloorPlanOverview();
+    window.requestAnimationFrame(() => viewport.__fitFloorPlanOverview());
+  });
+}
+
 function applyRegisteredFloorPlan(record, location, equipmentName, targetText = "") {
   const plan = [...loadFloorPlans()].reverse().find((item) => stationKey(item.stationName) === stationKey(record.stationName));
   if (!plan) return;
@@ -3198,7 +3627,9 @@ function continuousMatchTokens(value) {
     .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
 }
 
-function recordLineDiagramTokens(record) {
+function recordLineDiagramTokens(record, preferredText = "") {
+  const preferredTokens = continuousMatchTokens(preferredText);
+  if (String(preferredText || "").trim()) return preferredTokens;
   const directValues = [
     record.cellName,
     record.onuCellConfig,
@@ -3223,8 +3654,8 @@ function recordLineDiagramTokens(record) {
   return [...baseTokens, ...lineTokens].filter((token, index, array) => token && array.indexOf(token) === index);
 }
 
-function recordLineDiagramNodes(record) {
-  const tokens = recordLineDiagramTokens(record);
+function recordLineDiagramNodes(record, preferredText = "") {
+  const tokens = recordLineDiagramTokens(record, preferredText);
   const station = stationKey(record.stationName);
   const matchedLines = loadB2CLines().filter((line) => {
     if (stationKey(line.stationName) !== station) return false;
@@ -3245,8 +3676,8 @@ function recordLineDiagramNodes(record) {
     .filter((node, index, array) => node && array.indexOf(node) === index);
 }
 
-function diagramIndexedSearchTokens(record) {
-  return recordLineDiagramTokens(record)
+function diagramIndexedSearchTokens(record, preferredText = "") {
+  return recordLineDiagramTokens(record, preferredText)
     .map(normalizeDiagramSearchText)
     .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
 }
@@ -3263,16 +3694,14 @@ function b2cDiagramNodeScore(diagram, nodeKeys) {
   return 0;
 }
 
-function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens) {
+function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens, preferredText = "") {
   const indexedMatches = matchedIndexedTargets(diagram.searchTargets || [], tokens);
   const nodeScore = b2cDiagramNodeScore(diagram, nodeKeys);
   const exactIndexed = indexedMatches.filter((match) => match.fullTokenMatch).length;
-  const directText = [
-    record.cellName,
-    record.onuCellConfig,
-    record.b2cName,
-    record.serviceName,
-  ].map(normalizeDiagramSearchText).filter(Boolean);
+  const directValues = String(preferredText || "").trim()
+    ? [preferredText]
+    : [record.cellName, record.onuCellConfig, record.b2cName, record.serviceName];
+  const directText = directValues.map(normalizeDiagramSearchText).filter(Boolean);
   const directMatches = indexedMatches.filter((match) => {
     const targetText = normalizeDiagramSearchText(match.target?.text || match.target?.label || "");
     return directText.some((text) => text.length >= 6 && findContinuousDiagramMatch(targetText, [text]));
@@ -3285,13 +3714,13 @@ function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens) {
   };
 }
 
-async function findB2CDiagramForRecord(record) {
+async function findB2CDiagramForRecord(record, preferredText = "") {
   const diagrams = await loadB2CDiagrams(record.stationName);
-  const nodes = recordLineDiagramNodes(record);
+  const nodes = recordLineDiagramNodes(record, preferredText);
   const nodeKeys = nodes.map(diagramMatchKey).filter(Boolean);
-  const tokens = diagramIndexedSearchTokens(record);
+  const tokens = diagramIndexedSearchTokens(record, preferredText);
   const scored = diagrams
-    .map((diagram) => scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens))
+    .map((diagram) => scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens, preferredText))
     .filter((candidate) => candidate.score > 0)
     .sort((first, second) => {
       if (second.indexedMatches.length !== first.indexedMatches.length) return second.indexedMatches.length - first.indexedMatches.length;
@@ -3302,6 +3731,7 @@ async function findB2CDiagramForRecord(record) {
   if (indexedCandidate) {
     return { diagram: indexedCandidate.diagram, node: indexedCandidate.diagram.nodeName || nodes[0] || "" };
   }
+  if (String(preferredText || "").trim()) return { diagram: null, node: nodes[0] || "" };
   const hasIndexedDiagrams = diagrams.some((diagram) => diagram.searchTargets?.length);
   const b2cLookupRequiresExactSheet = Boolean(record.b2cName || record.serviceName) && tokens.length && hasIndexedDiagrams;
   if (b2cLookupRequiresExactSheet) return { diagram: null, node: nodes[0] || "" };
@@ -3384,7 +3814,7 @@ function initLineDiagramZoom(root) {
 
   let zoom = 1;
   const minZoom = 1;
-  const maxZoom = 10;
+  const maxZoom = 12;
   const searchZoom = 7;
   let ready = false;
   let baseWidth = 0;
@@ -3669,7 +4099,7 @@ async function initPdfLineDiagramMap(root, diagram) {
   );
   const unitViewport = page.getViewport({ scale: 1 });
   const minLevel = 1;
-  const maxLevel = 10;
+  const maxLevel = 12;
   const searchLevel = 7;
   const indexedWidths = (diagram.searchTargets || [])
     .map((target) => Number(target?.width))
@@ -4030,16 +4460,18 @@ async function applyIndexedImageHighlights(root, tokens, searchTargets = []) {
   return matches.length;
 }
 
-async function renderHfcLineDiagram(record, type) {
+async function renderHfcLineDiagram(record, type, preferredText = "") {
   const label = type === "ups" ? "UPS" : (type === "b2c" ? "B2C" : "ONU");
   let diagram = null;
   let node = "";
   try {
-    ({ diagram, node } = await findB2CDiagramForRecord(record));
+    ({ diagram, node } = await findB2CDiagramForRecord(record, preferredText));
   } catch (error) {
     console.error("B2C 직선도 조회 실패", error);
   }
-  const tokens = recordLineDiagramTokens(record);
+  const legacyBlackDiagram = diagram?.renderer === "browser-svg" || diagram?.imageFormat === "svg";
+  if (legacyBlackDiagram) diagram = null;
+  const tokens = recordLineDiagramTokens(record, preferredText);
   qs("#rackView .topbar span").textContent = "직선도";
 
   if (!diagram) {
@@ -4049,7 +4481,9 @@ async function renderHfcLineDiagram(record, type) {
           <div><span>직선도</span><h1>${escapeHtml(label)} 직선도</h1></div>
           <dl class="rack-meta"><div><dt>국사</dt><dd>${escapeHtml(record.stationName || "-")}</dd></div></dl>
         </div>
-        <p class="uploaded-rack-warning">등록된 B2C 직선도 시트를 찾지 못했습니다. 관리자 화면에서 해당 국사의 B2C 전용선 DB를 다시 업로드해주세요.</p>
+        <p class="uploaded-rack-warning">${preferredText
+          ? `입력한 “${escapeHtml(preferredText)}”과(와) 6글자 연속 일치하는 남색 도형을 해당 국사의 직선도에서 찾지 못했습니다.`
+          : "등록된 B2C 직선도가 없거나 이전 검은 화면 형식입니다. 관리자 화면에서 해당 국사의 B2C 전용선 DB를 다시 업로드해주세요."}</p>
       </section>`;
     showView("rackView");
     return;
@@ -4145,16 +4579,27 @@ async function renderHfcLineDiagram(record, type) {
   zoomController?.setMatches(matchedElements);
   if (!matchedCount) {
     const target = qs("#rackPanel .uploaded-excel-plan") || qs("#rackPanel .uploaded-drawing-plan") || qs("#rackPanel .line-diagram-canvas");
-    target.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">남색 도형에서 ${escapeHtml(record.cellName || record.serviceName || "해당 셀/B2C")}과(와) 6글자 연속 일치하는 항목을 찾지 못했습니다.</p>`);
+    const searchLabel = preferredText || record.cellName || record.serviceName || "해당 셀/B2C";
+    target.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">남색 도형에서 ${escapeHtml(searchLabel)}과(와) 6글자 연속 일치하는 항목을 찾지 못했습니다.</p>`);
   }
 }
 
 function renderAdmin() {
   renderEditableTable("usersTable", userColumns, loadUsers(), saveUsers);
-  renderEditableTable("dataTable", recordColumns, loadRecords(), saveRecords);
+  renderEditableTable("dataTable", recordColumns, filteredAdminRecords(), saveRecords);
   renderFloorPlansAdmin();
   renderB2CAdmin();
   renderSharedDbAdmin();
+}
+
+function filteredAdminRecords() {
+  const query = normalize(qs("#dataSearch")?.value || "");
+  return loadRecords()
+    .map((record, index) => ({ ...record, __sourceIndex: index }))
+    .filter((record) => {
+      if (!query) return true;
+      return recordColumns.some((key) => normalize(record[key]).includes(query));
+    });
 }
 
 function clearUsersDatabase() {
@@ -4192,10 +4637,11 @@ function renderEditableTable(tableId, columns, rows, saveFn) {
   const table = qs(`#${tableId}`);
   const head = columns.map((key) => `<th>${columnLabels[key] || key}</th>`).join("");
   const body = rows.map((rowData, rowIndex) => {
+    const sourceIndex = Number.isInteger(rowData.__sourceIndex) ? rowData.__sourceIndex : rowIndex;
     const cells = columns.map((key) => `
-      <td><input value="${escapeHtml(rowData[key] || "")}" data-table="${tableId}" data-row="${rowIndex}" data-key="${key}"></td>
+      <td><input value="${escapeHtml(rowData[key] || "")}" data-table="${tableId}" data-row="${sourceIndex}" data-key="${key}" ${key === "keyNumber" ? "inputmode=\"numeric\" pattern=\"[0-9]*\"" : ""}></td>
     `).join("");
-    return `<tr>${cells}<td><button class="delete-btn" data-delete="${tableId}" data-row="${rowIndex}" type="button">삭제</button></td></tr>`;
+    return `<tr>${cells}<td><button class="delete-btn" data-delete="${tableId}" data-row="${sourceIndex}" type="button">삭제</button></td></tr>`;
   }).join("");
 
   table.innerHTML = `
@@ -4236,22 +4682,33 @@ function addRow(type) {
     saveUsers(users);
   } else {
     const records = loadRecords();
-    records.push(Object.fromEntries(recordColumns.map((key) => [key, ""])));
+    records.push({ ...Object.fromEntries(recordColumns.map((key) => [key, ""])), keyNumber: nextRecordKeyNumber(records) });
     saveRecords(records);
   }
 
   renderAdmin();
 }
 
+function nextRecordKeyNumber(records) {
+  const highest = records.reduce((max, record) => {
+    const value = Number(String(record.keyNumber || "").replace(/[^0-9]/g, ""));
+    return Number.isFinite(value) ? Math.max(max, value) : max;
+  }, 0);
+  return String(highest + 1);
+}
+
 function recordImportKey(record) {
+  const keyNumber = normalize(record.keyNumber);
+  if (keyNumber) return `key:${keyNumber}`;
   const cellName = normalize(record.cellName);
   if (cellName) return `cell:${cellName}`;
-  return [
+  const fallbackParts = [
     stationKey(record.stationName),
     normalize(record.otxMain),
     normalize(record.orxMain),
     normalize(record.onuLocation),
-  ].join("|");
+  ];
+  return fallbackParts.some(Boolean) ? fallbackParts.join("|") : "";
 }
 
 function mergeImportedRecords(existing, imported) {
@@ -4387,6 +4844,7 @@ function bindEvents() {
   qs("#b2cSearchBtn").addEventListener("click", searchB2CLines);
   qs("#cellSearch").addEventListener("keydown", (event) => event.key === "Enter" && searchRecords());
   qs("#b2cSearch").addEventListener("keydown", (event) => event.key === "Enter" && searchB2CLines());
+  qs("#dataSearch")?.addEventListener("input", () => renderEditableTable("dataTable", recordColumns, filteredAdminRecords(), saveRecords));
   qs("#addUserBtn").addEventListener("click", () => addRow("users"));
   qs("#addDataBtn").addEventListener("click", () => addRow("records"));
   qs("#exportUsersBtn").addEventListener("click", () => exportExcel("users"));
@@ -4408,6 +4866,7 @@ async function initApp() {
   await loadSharedDatabaseFromSite();
   ensureSeedData();
   bindEvents();
+  installMobileBackHandler();
   showView("loginView");
 }
 

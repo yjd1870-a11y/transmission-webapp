@@ -6,3 +6,4 @@ tools/gh-cli/
 .server.stdout.log
 .server.stderr.log
 *.log
+.cache/
