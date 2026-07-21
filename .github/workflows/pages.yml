@@ -25,12 +25,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build static site
+      - name: Build secure server redirect
         shell: bash
         run: |
           mkdir -p _site
-          cp index.html app.js styles.css _site/
-          cp -R assets _site/assets
+          cp pages-redirect.html _site/index.html
+          cp pages-redirect.html _site/404.html
           touch _site/.nojekyll
 
       - name: Configure Pages

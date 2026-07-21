@@ -28,7 +28,8 @@
 - `RATIS_MASTER_KEY`는 Blueprint 생성 화면에서만 직접 입력하며 GitHub 변수, 소스, `.env`에는 저장하지 않습니다.
 - 계정 해시는 영구 디스크의 `/var/data/auth-users.json`에 저장됩니다.
 - 배포 상태 확인 주소는 `/api/health`이며 `apiVersion`이 `managed-auth-v1`이어야 합니다.
-- Render 운영 주소에서 관리자 및 사용자 계정을 확인한 뒤 GitHub Pages 주소를 운영 주소로 전환합니다.
+- Render 운영 주소는 `https://ratis-transmission-webapp-yjd1870.onrender.com/`입니다.
+- GitHub Pages 주소는 정적 인증 화면을 제공하지 않고 Render 운영 주소로 이동합니다.
 
 ## 주요 기능
 

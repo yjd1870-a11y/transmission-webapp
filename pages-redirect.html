@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="0; url=https://ratis-transmission-webapp-yjd1870.onrender.com/">
+  <meta name="robots" content="noindex">
+  <title>RATIS 전송망 운영 서버로 이동</title>
+  <script>
+    (() => {
+      const pagesBasePath = "/transmission-webapp";
+      const sourcePath = window.location.pathname;
+      const targetPath = sourcePath.startsWith(pagesBasePath)
+        ? sourcePath.slice(pagesBasePath.length) || "/"
+        : "/";
+      const target = new URL(targetPath, "https://ratis-transmission-webapp-yjd1870.onrender.com");
+      target.search = window.location.search;
+      target.hash = window.location.hash;
+      window.location.replace(target.href);
+    })();
+  </script>
+</head>
+<body>
+  <p>
+    보안 로그인 서버로 이동하고 있습니다.
+    <a href="https://ratis-transmission-webapp-yjd1870.onrender.com/">계속하려면 여기를 누르세요.</a>
+  </p>
+</body>
+</html>
