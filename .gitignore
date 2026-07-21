@@ -7,3 +7,23 @@ tools/gh-cli/
 .server.stderr.log
 *.log
 .cache/
+
+# Local environment and secret material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+credentials*.json
+secret*.json
+secrets*.json
+secret*.yaml
+secret*.yml
+secrets*.yaml
+secrets*.yml
+.npmrc
+.pypirc

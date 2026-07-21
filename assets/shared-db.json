@@ -5,11 +5,13 @@
   "updatedAt": "2026-07-08T05:53:39.543Z",
   "users": [
     {
-      "id": "admin",      "name": "관리자",
+      "id": "admin",
+      "name": "관리자",
       "role": "admin"
     },
     {
-      "id": "demo",      "name": "조회사용자",
+      "id": "demo",
+      "name": "조회사용자",
       "role": "user"
     }
   ],

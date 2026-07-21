@@ -17,7 +17,7 @@ let mobileExitBackAt = 0;
 let mobileExitBackTimer = null;
 let activePhotoLightboxClose = null;
 
-const userColumns = ["id", "password", "name", "role"];
+const userColumns = ["id", "name", "role"];
 const recordColumns = [
   "keyNumber", "cellName", "stationName", "stationAddress", "otxMain", "otxLine", "orxMain", "orxLine", "backup", "backupLine",
   "otxRack", "otxShelf", "otxPort", "otxModel", "orxRack", "orxShelf", "orxPort", "orxModel", "onuLocation", "onuPhoto",
@@ -26,7 +26,8 @@ const recordColumns = [
 ];
 
 const columnLabels = {
-  id: "아이디",  name: "이름",
+  id: "아이디",
+  name: "이름",
   role: "권한",
   keyNumber: "키번호",
   cellName: "셀명",
@@ -72,7 +73,6 @@ const importColumnAliases = {
 };
 
 const sampleUsers = [
-  { id: "admin", name: "관리자", role: "admin" },
   { id: "demo", name: "조회사용자", role: "user" },
 ];
 
@@ -658,34 +658,70 @@ function showView(viewId) {
   qs(`#${viewId}`).classList.remove("hidden");
 }
 
-function login(event) {
+async function requestAdminLogin(id, password) {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, password }),
+  });
+  const result = await response.json().catch(() => ({}));
+  return { response, result };
+}
+
+async function restoreAdminSession() {
+  try {
+    const response = await fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" });
+    if (!response.ok) return null;
+    const result = await response.json();
+    return result?.authenticated && result?.user?.role === "admin" ? result.user : null;
+  } catch (error) {
+    return null;
+  }
+
+async function login(event) {
   event.preventDefault();
   const id = qs("#loginId").value.trim();
   const password = qs("#loginPassword").value;
-  const user = loadUsers().find((item) => item.id === id && item.password === password);
+  const message = qs("#loginMessage");
+  const submitButton = qs("#loginForm button[type='submit']");
+  message.textContent = "인증 정보를 확인하는 중입니다.";
+  submitButton.disabled = true;
 
-  if (!user) {
-    qs("#loginMessage").textContent = "아이디 또는 비밀번호를 확인해주세요.";
-    return;
+  try {
+    const { response, result } = await requestAdminLogin(id, password);
+    if (response.ok && result?.authenticated && result?.user?.role === "admin") {
+      authenticatedAdmin = result.user;
+      message.textContent = "";
+      qs("#loginForm").reset();
+      window.history.replaceState(null, "", "/admin");
+      showView("adminView");
+      window.requestAnimationFrame(() => renderAdmin());
+      return;
+    }
+  } catch (error) {
+    console.warn("관리자 인증 서버에 연결하지 못했습니다.", error);
+  } finally {
+    submitButton.disabled = false;
   }
 
-  qs("#loginMessage").textContent = "";
-  qs("#loginForm").reset();
-
-  if (user.role === "admin") {
-    renderAdmin();
-    showView("adminView");
-    return;
-  }
-
-  renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
-  showView("userView");
+  message.textContent = "아이디 또는 비밀번호를 확인해주세요.";
 }
 
-function logout() {
+async function logout() {
+  if (authenticatedAdmin || ["/admin", "/admin/"].includes(window.location.pathname)) {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
+  }
+  authenticatedAdmin = null;
+  if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
   showView("loginView");
 }
 
+  if (viewId === "adminView" && authenticatedAdmin?.role !== "admin") {
+    viewId = "loginView";
+    const message = qs("#loginMessage");
+    if (message) message.textContent = "관리자 인증이 필요합니다.";
+  }
 function showSearchScreen() {
   showView("userView");
   renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
@@ -700,6 +736,7 @@ function looseMatch(value, query) {
   const key = normalize(query);
   if (!text || !key) return false;
   return text.includes(key) || (key.length >= 3 && key.includes(text));
+}
 }
 
 function b2cSearchMatch(value, query) {
