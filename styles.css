@@ -5304,6 +5304,37 @@ body {
 
 /* Keep line-diagram controls fully visible on phone-width screens. */
 @media (max-width: 540px) {
+  html,
+  body,
+  .app-shell,
+  .login-view {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  .login-view {
+    gap: 24px;
+    padding: 28px 16px;
+  }
+
+  .brand-panel,
+  .login-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .brand-panel h1,
+  .brand-panel p {
+    overflow-wrap: anywhere;
+  }
+
+  .login-card {
+    padding: 24px 20px;
+  }
+
   .line-diagram-zoom-toolbar {
     display: flex;
     align-items: center;
