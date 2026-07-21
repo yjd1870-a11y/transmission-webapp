@@ -5358,10 +5358,16 @@ async function adminUsersRequest(path = "", options = {}) {
       ...(options.headers || {}),
     },
   });
-  const result = await response.json().catch(() => ({}));
+  const contentType = String(response.headers.get("content-type") || "");
+  const result = contentType.includes("application/json")
+    ? await response.json().catch(() => ({}))
+    : {};
   if (response.status === 401) {
     await logout();
     throw new Error("관리자 세션이 만료되었습니다. 다시 로그인해주세요.");
+  }
+  if (response.status === 404) {
+    throw new Error("실행 중인 서버가 구버전입니다. '웹사이트 실행.cmd'를 다시 실행해 서버를 업데이트해주세요.");
   }
   if (!response.ok) throw new Error(result?.error || "계정 요청을 처리하지 못했습니다.");
   return result;

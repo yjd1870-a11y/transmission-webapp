@@ -55,6 +55,10 @@ child.stderr.on("data", (chunk) => { serverOutput += chunk.toString(); });
 try {
   await waitForServer(baseUrl, child);
 
+  const versionedHealth = await fetch(`${baseUrl}/api/health`);
+  assert.equal(versionedHealth.status, 200);
+  assert.equal((await versionedHealth.json()).apiVersion, "managed-auth-v1");
+
   const unauthenticatedAdmin = await fetch(`${baseUrl}/admin`, { redirect: "manual" });
   assert.equal(unauthenticatedAdmin.status, 302);
   assert.equal(unauthenticatedAdmin.headers.get("location"), "/?auth=admin-required");

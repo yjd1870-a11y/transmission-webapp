@@ -10,6 +10,7 @@ import { promisify } from "node:util";
 const root = process.cwd();
 const port = Number(process.env.PORT || 8000);
 const host = process.env.HOST || "127.0.0.1";
+const apiVersion = "managed-auth-v1";
 const lineDiagramCacheVersion = "excel-picture-v7-mapyeong-colored-text";
 const lineDiagramCacheDir = join(root, ".cache", "line-diagram-images");
 const lineDiagramJobs = new Map();
@@ -556,7 +557,7 @@ const server = createServer(async (request, response) => {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
     });
-    response.end(JSON.stringify({ ok: true, activeLineDiagramJobs: lineDiagramJobs.size }));
+    response.end(JSON.stringify({ ok: true, apiVersion, activeLineDiagramJobs: lineDiagramJobs.size }));
     return;
   }
   if (request.method === "GET" && url.pathname === "/assets/shared-db.json") {
