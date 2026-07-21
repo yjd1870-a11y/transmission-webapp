@@ -7,14 +7,9 @@
   <meta name="description" content="현장 스마트폰용 CATV 전송망 통합 조회 웹앱">
   <meta name="mobile-web-app-capable" content="yes">
   <title>CATV 전송망 조회</title>
-  <script>
-    if (window.location.protocol === "file:") {
-      window.location.replace("http://127.0.0.1:8000/?opened=index-file&refresh=CATV0708");
-    }
-  </script>
   <link rel="stylesheet" href="styles.css?v=CATV0720ADMINALIGN">
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 </head>
 <body>
   <main class="app-shell">
@@ -229,7 +224,6 @@
     </form>
   </dialog>
 
-  <script src="assets/line-diagrams/anseong-vector/manifest-data.js?v=CATV0708ZOOM100"></script>
   <script src="app.js?v=CATV0721MANAGEDAUTH2"></script>
 </body>
 </html>

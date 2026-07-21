@@ -58,6 +58,9 @@ try {
   const versionedHealth = await fetch(`${baseUrl}/api/health`);
   assert.equal(versionedHealth.status, 200);
   assert.equal((await versionedHealth.json()).apiVersion, "managed-auth-v1");
+  assert.equal(versionedHealth.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(versionedHealth.headers.get("x-frame-options"), "DENY");
+  assert.match(versionedHealth.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
 
   const unauthenticatedAdmin = await fetch(`${baseUrl}/admin`, { redirect: "manual" });
   assert.equal(unauthenticatedAdmin.status, 302);
@@ -69,11 +72,17 @@ try {
   const unauthenticatedUsers = await fetch(`${baseUrl}/api/admin/users`);
   assert.equal(unauthenticatedUsers.status, 401);
 
-  const publicDatabase = await fetch(`${baseUrl}/assets/shared-db.json`);
-  assert.equal(publicDatabase.status, 200);
-  const publicUsers = (await publicDatabase.json()).users;
-  assert.ok(publicUsers.every((user) => user.role !== "admin"));
-  assert.ok(publicUsers.every((user) => !("password" in user)));
+  const privateDatabase = await fetch(`${baseUrl}/assets/shared-db.json`);
+  assert.equal(privateDatabase.status, 401);
+  const privateDiagram = await fetch(`${baseUrl}/assets/line-diagrams/anseong-vector/manifest.json`);
+  assert.equal(privateDiagram.status, 401);
+
+  const rejectedCrossSiteLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "sec-fetch-site": "cross-site" },
+    body: JSON.stringify({ id: "admin", password: testMasterKey }),
+  });
+  assert.equal(rejectedCrossSiteLogin.status, 403);
 
   const rejectedLogin = await fetch(`${baseUrl}/api/auth/login`, {
     method: "POST",
@@ -98,6 +107,31 @@ try {
   const authenticatedAdmin = await fetch(`${baseUrl}/admin`, { headers: { cookie }, redirect: "manual" });
   assert.equal(authenticatedAdmin.status, 200);
   assert.match(await authenticatedAdmin.text(), /id="adminView"/);
+
+  const authenticatedDatabase = await fetch(`${baseUrl}/assets/shared-db.json`, { headers: { cookie } });
+  assert.equal(authenticatedDatabase.status, 200);
+  const authenticatedUsers = (await authenticatedDatabase.json()).users;
+  assert.ok(authenticatedUsers.every((user) => user.role !== "admin"));
+  assert.ok(authenticatedUsers.every((user) => !("password" in user)));
+
+  const authenticatedDiagram = await fetch(`${baseUrl}/assets/line-diagrams/anseong-vector/manifest.json`, { headers: { cookie } });
+  assert.equal(authenticatedDiagram.status, 200);
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const bruteForceAttempt = await fetch(`${baseUrl}/api/auth/login`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "rate-limit-target", password: "wrong" }),
+    });
+    assert.equal(bruteForceAttempt.status, 401);
+  }
+  const rateLimitedLogin = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "rate-limit-target", password: "wrong" }),
+  });
+  assert.equal(rateLimitedLogin.status, 429);
+  assert.ok(Number(rateLimitedLogin.headers.get("retry-after")) > 0);
 
   const initialAccountsResponse = await fetch(`${baseUrl}/api/admin/users`, { headers: { cookie } });
   assert.equal(initialAccountsResponse.status, 200);
