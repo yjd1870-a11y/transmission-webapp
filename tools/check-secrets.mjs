@@ -23,6 +23,11 @@ const rules = [
     regex: /["'`]?(?:api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret|master[_-]?key|ratis[_-]?master[_-]?key)["'`]?\s*[:=]\s*["'`][^"'`\s]{8,}["'`]/i,
     gitRegex: "[\"'`]?(api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|passwd|secret|master[_-]?key|ratis[_-]?master[_-]?key)[\"'`]?[[:space:]]*[:=][[:space:]]*[\"'`][^\"'`[:space:]]{8,}[\"'`]",
   },
+  {
+    name: "documented-credential-pair",
+    regex: /^\s*-\s*[^:\n]*(?:계정|관리자|사용자|admin|user)[^:\n]*:\s*`[^`\s]+`\s*\/\s*`[^`\s]{6,}`/im,
+    gitRegex: "^[[:space:]]*-[[:space:]]*[^:]*(계정|관리자|사용자|admin|user)[^:]*:[[:space:]]*`[^`[:space:]]+`[[:space:]]*/[[:space:]]*`[^`[:space:]]{6,}`",
+  },
 ];
 
 function git(args, options = {}) {

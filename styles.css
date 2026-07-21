@@ -396,13 +396,42 @@
 .floor-plan-form { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .floor-plan-form label { display: grid; gap: 5px; font-weight: 700; }
 .floor-plan-form input { min-height: 38px; padding: 6px; border: 1px solid var(--line); }
+.floor-plan-form label small { color: #62717c; font-size: 11px; font-weight: 700; }
+.floor-plan-image-form {
+  display: grid;
+  grid-template-columns: 200px 290px max-content max-content;
+  align-items: start;
+}
+.floor-plan-image-form > label { min-width: 0; }
+.floor-plan-image-form > label input { box-sizing: border-box; width: 100%; }
+.floor-plan-image-form > button { align-self: start; margin-top: 23px; }
+.floor-plan-cancel-btn { min-height: 38px; color: #344b59; background: #e4edf2; }
 .floor-plan-help { color: var(--muted); font-size: 13px; }
 .floor-plan-message { min-height: 18px; margin: 8px 0 0; color: #075d5c; font-size: 13px; font-weight: 700; }
 .floor-plan-message.is-error { color: #a32a1a; }
+.floor-coordinate-editor { display: grid; gap: 10px; margin: 14px 0; padding: 12px; border: 1px solid #aebbc4; border-radius: 8px; background: #f5f8fa; }
+.floor-coordinate-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.floor-coordinate-toolbar label { display: grid; gap: 4px; font-weight: 800; }
+.floor-coordinate-toolbar input { width: 170px; min-height: 38px; padding: 6px 8px; border: 1px solid #8fa1ad; }
+.floor-coordinate-toolbar button { min-height: 38px; color: #7a251a; background: #ffe5dd; }
+.floor-coordinate-toolbar span { flex: 1 1 280px; color: #52636d; font-size: 13px; font-weight: 700; }
+.floor-coordinate-stage { position: relative; width: min(100%, 1100px); overflow: hidden; border: 2px solid #607585; border-radius: 6px; background: #fff; cursor: crosshair; }
+.floor-coordinate-stage > img { display: block; width: 100%; height: auto; }
+.floor-coordinate-markers { position: absolute; inset: 0; pointer-events: none; }
+.floor-coordinate-marker { position: absolute; display: grid; place-items: center; width: 22px; height: 22px; transform: translate(-50%, -50%); border: 3px solid #fff; border-radius: 50%; color: #fff; background: #e53025; box-shadow: 0 0 0 3px rgba(229, 48, 37, .38), 0 3px 8px rgba(0, 0, 0, .35); }
+.floor-coordinate-marker b { position: absolute; left: 50%; bottom: calc(100% + 4px); min-width: 42px; padding: 2px 5px; transform: translateX(-50%); border-radius: 4px; background: rgba(18, 43, 61, .9); font-size: 10px; text-align: center; }
+.floor-coordinate-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.floor-coordinate-list-item { display: inline-flex; overflow: hidden; border: 1px solid #9ab1bf; border-radius: 999px; background: #fff; }
+.floor-coordinate-list-item button { min-height: 30px; padding: 4px 8px; border: 0; border-radius: 0; color: #123b52; background: #fff; font-size: 12px; font-weight: 800; }
+.floor-coordinate-list-item button + button { min-width: 30px; padding-inline: 6px; border-left: 1px solid #c6d2da; color: #9a2b1c; background: #fff1ed; }
+.floor-coordinate-list span { color: #6b747d; font-size: 13px; }
 .floor-plans-list { display: grid; gap: 6px; }
 .floor-plan-list-item { display: flex; align-items: center; gap: 10px; padding: 9px; border: 1px solid var(--line); }
 .floor-plan-list-item span { flex: 1; color: var(--muted); }
 .floor-plan-list-item button { background: #ffe5dd; color: #8a1f11; }
+.floor-plan-list-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.floor-plan-list-actions .floor-plan-edit-btn { color: #075d5c; background: #dff5f3; }
+.floor-plan-list-actions .floor-plan-edit-btn:disabled { cursor: not-allowed; opacity: .45; }
 .shared-db-summary {
   display: flex;
   flex-wrap: wrap;
@@ -453,12 +482,25 @@
   display: block;
   margin: 0;
 }
-.uploaded-rack-marker, .uploaded-rack-fallback {
-  position: absolute; z-index: 2; display: grid; place-items: center; min-width: 54px; min-height: 42px;
-  padding: 3px 7px; transform: translate(-50%, -50%); border: 3px solid #087a78; border-radius: 5px;
-  color: #fff; background: rgba(8, 122, 120, .88); font-size: 13px; font-weight: 900; box-shadow: 0 0 0 2px rgba(255,255,255,.86);
+.uploaded-rack-marker {
+  position: absolute; z-index: 4; width: 24px; height: 24px; transform: translate(-50%, -50%) scale(var(--floor-plan-marker-scale, 1));
+  border: 4px solid #fff; border-radius: 50%; color: #fff; background: #ff2d20;
+  box-shadow: 0 3px 10px rgba(122, 8, 0, .72); pointer-events: none;
 }
-.uploaded-rack-marker small, .uploaded-rack-fallback small, .uploaded-rack-active small { display: block; font-size: 9px; line-height: 1.1; }
+.uploaded-rack-marker::before {
+  content: ""; position: absolute; left: 50%; top: 50%; z-index: -1; width: 62px; height: 62px;
+  border: 5px solid rgba(255, 45, 32, .95); border-radius: 50%; background: rgba(255, 230, 0, .22);
+  transform: translate(-50%, -50%); animation: line-diagram-map-pulse 1.4s ease-out infinite;
+}
+.uploaded-rack-marker-label {
+  position: absolute; left: 50%; top: calc(100% + 10px); display: grid; min-width: 96px; padding: 5px 8px;
+  transform: translateX(-50%); border: 2px solid #ff2d20; border-radius: 7px; color: #122b3d;
+  background: rgba(255, 255, 255, .94); box-shadow: 0 3px 10px rgba(122, 8, 0, .22); text-align: center;
+}
+.uploaded-rack-marker-label b { font-size: 12px; line-height: 1.1; white-space: nowrap; }
+.uploaded-rack-marker-label small { display: block; color: #b6170d; font-size: 9px; line-height: 1.15; white-space: nowrap; }
+.uploaded-rack-fallback { position: absolute; z-index: 2; }
+.uploaded-rack-fallback small, .uploaded-rack-active small { display: block; font-size: 9px; line-height: 1.1; }
 .uploaded-excel-plan { position: relative; padding: 12px; background: #fff; }
 .uploaded-excel-plan .excel-plan-canvas { display: grid; width: max-content; min-width: 0; padding: 8px; background: #fff; }
 .uploaded-excel-plan .excel-plan-cell { display: grid; place-items: center; box-sizing: border-box; min-width: 0; min-height: 0; padding: 1px 3px; overflow: hidden; color: #111; font-size: 11px; line-height: 1.02; text-align: center; white-space: pre-wrap; word-break: keep-all; overflow-wrap: anywhere; }
@@ -1002,6 +1044,21 @@ input {
 }
 
 input:focus {
+  outline: 3px solid rgba(15, 95, 143, .16);
+  border-color: var(--accent);
+}
+
+select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: white;
+  color: var(--ink);
+}
+
+select:focus {
   outline: 3px solid rgba(15, 95, 143, .16);
   border-color: var(--accent);
 }
@@ -1999,6 +2056,56 @@ td input {
   background: #ffe5dd;
 }
 
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 330px;
+}
+
+.account-actions button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.account-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #53626d;
+  background: #eef2f5;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.account-status.is-ready { color: #075d5c; background: #dff4ef; }
+.account-status.is-pending { color: #8a5b00; background: #fff1c7; }
+.account-status.is-locked { color: #8a1f11; background: #ffe5dd; }
+.account-root-note { color: var(--muted); font-weight: 700; white-space: nowrap; }
+
+.account-dialog {
+  width: min(520px, calc(100% - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--paper);
+  box-shadow: 0 24px 70px rgba(23, 32, 42, .28);
+}
+
+.account-dialog::backdrop { background: rgba(16, 28, 38, .58); }
+.account-form { padding: 24px; }
+.account-form > .primary-btn { width: 100%; margin-top: 8px; }
+.account-form > p { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.account-dialog-head { display: flex; align-items: center; gap: 12px; }
+.account-dialog-head h2 { margin: 0; font-size: 22px; }
+.account-dialog-head button { margin-left: auto; }
+
 @media (max-width: 820px) {
   .login-view,
   .query-panel {
@@ -2370,6 +2477,8 @@ td input {
     overflow: auto !important;
   }
   .floor-plan-form { align-items: stretch; }
+  .floor-plan-image-form { grid-template-columns: minmax(0, 1fr); }
+  .floor-plan-image-form > button { margin-top: 0; }
   .floor-plan-form label,
   .floor-plan-form input,
   .floor-plan-form button,
@@ -2380,6 +2489,9 @@ td input {
     flex-direction: column;
   }
   .floor-plan-list-item button { min-height: 48px; }
+  .account-actions { min-width: 280px; }
+  .account-actions button { min-height: 44px; }
+  .account-form { padding: 20px; }
 }
 
 /* KT field lookup visual refresh. */
@@ -5028,6 +5140,18 @@ body {
   z-index: 6;
   width: max-content;
   max-width: calc(100% - 24px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .line-diagram-sheet .line-diagram-canvas.mouse-pan-enabled,
+  .rack-diagram-sheet .floor-plan.mouse-pan-enabled {
+    cursor: grab;
+  }
+
+  .line-diagram-sheet .line-diagram-canvas.mouse-pan-enabled.is-mouse-panning,
+  .rack-diagram-sheet .floor-plan.mouse-pan-enabled.is-mouse-panning {
+    cursor: grabbing;
+  }
 }
 
 @media (max-width: 820px) {

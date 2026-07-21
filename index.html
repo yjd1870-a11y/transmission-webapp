@@ -12,7 +12,7 @@
       window.location.replace("http://127.0.0.1:8000/?opened=index-file&refresh=CATV0708");
     }
   </script>
-  <link rel="stylesheet" href="styles.css?v=CATV0714PHOTOZOOMBACK">
+  <link rel="stylesheet" href="styles.css?v=CATV0720ADMINALIGN">
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
@@ -38,8 +38,8 @@
         <button class="primary-btn" type="submit">접속</button>
         <p id="loginMessage" class="message" role="alert"></p>
         <div class="account-hint">
-          <span>사용자 demo / demo123</span>
-          <span>관리자 admin / admin123</span>
+          <span>계정은 관리자가 발급합니다.</span>
+          <span>아이디와 발급받은 비밀번호를 입력하세요.</span>
         </div>
       </form>
     </section>
@@ -102,12 +102,11 @@
           <div class="panel-head">
             <h2>가입 DB</h2>
             <div class="tool-row">
-              <input id="usersFile" type="file" accept=".xlsx,.xls,.csv">
-              <button id="addUserBtn" class="secondary-btn" type="button">행 추가</button>
-              <button id="exportUsersBtn" class="secondary-btn" type="button">엑셀 저장</button>
-              <button id="clearUsersBtn" class="danger-btn" type="button">전체 삭제</button>
+              <button id="addUserBtn" class="secondary-btn" type="button">계정 생성</button>
             </div>
           </div>
+          <p class="floor-plan-help">공개 회원가입은 사용하지 않습니다. 관리자가 아이디·비밀번호·권한을 지정하며 비밀번호는 화면이나 엑셀에 표시되지 않습니다.</p>
+          <p id="usersTableMessage" class="floor-plan-message admin-table-message" role="status"></p>
           <div class="table-wrap">
             <table id="usersTable"></table>
           </div>
@@ -124,6 +123,7 @@
               <button id="clearDataBtn" class="danger-btn" type="button">전체 삭제</button>
             </div>
           </div>
+          <p id="dataTableMessage" class="floor-plan-message admin-table-message" role="status"></p>
           <div class="table-wrap wide">
             <table id="dataTable"></table>
           </div>
@@ -131,24 +131,37 @@
 
         <article class="admin-panel floor-plan-admin">
           <div class="panel-head"><h2>국사 평면도 DB</h2><button id="clearFloorPlansBtn" class="danger-btn" type="button">전체 삭제</button></div>
-          <div class="floor-plan-form">
+          <div class="floor-plan-form floor-plan-image-form">
             <label>국사명 <input id="floorPlanStation" placeholder="예: 중앙국사"></label>
-            <label>평면도 엑셀 <input id="floorPlanFile" type="file" accept=".xlsx,.xls"></label>
+            <label>평면도 이미지 <input id="floorPlanFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><small>수정할 때 선택하지 않으면 기존 이미지 유지</small></label>
             <button id="saveFloorPlanBtn" class="secondary-btn" type="button">등록 / 수정</button>
+            <button id="cancelFloorPlanEditBtn" class="floor-plan-cancel-btn hidden" type="button">수정 취소</button>
           </div>
-          <p class="floor-plan-help">원본 서식(병합, 크기, 테두리, 색상)을 유지한 엑셀 평면도를 등록하세요. 랙 번호 칸은 조회 시 자동으로 강조됩니다.</p>
+          <div id="floorPlanCoordinateEditor" class="floor-coordinate-editor hidden">
+            <div class="floor-coordinate-toolbar">
+              <label>노드명 / 랙정보 <input id="floorPlanRackCoordinate" placeholder="예: 시내향 144C 또는 101"></label>
+              <button id="clearFloorPlanCoordinatesBtn" type="button">좌표 전체 삭제</button>
+              <span>노드명 또는 랙 정보를 입력한 뒤 이미지에서 해당 OFD 함·랙의 중앙을 클릭하세요.</span>
+            </div>
+            <div id="floorPlanCoordinateStage" class="floor-coordinate-stage">
+              <img id="floorPlanCoordinateImage" alt="평면도 좌표 지정 미리보기">
+              <div id="floorPlanCoordinateMarkers" class="floor-coordinate-markers"></div>
+            </div>
+            <div id="floorPlanCoordinateList" class="floor-coordinate-list"></div>
+          </div>
+          <p class="floor-plan-help">목록의 수정 버튼으로 기존 이미지와 좌표를 불러올 수 있습니다. 좌표명을 선택한 뒤 이미지의 새 위치를 클릭하면 이동하며, 이미지가 잘못된 경우에만 새 파일을 선택하세요.</p>
           <p id="floorPlanMessage" class="floor-plan-message" role="status"></p>
           <div id="floorPlansList" class="floor-plans-list"></div>
         </article>
 
         <article class="admin-panel b2c-admin">
-          <div class="panel-head"><h2>B2C 전용선 DB</h2><button id="clearB2CBtn" class="danger-btn" type="button">전체 삭제</button></div>
+          <div class="panel-head"><h2>선번장(직선도) DB</h2><button id="clearB2CBtn" class="danger-btn" type="button">전체 삭제</button></div>
           <div class="floor-plan-form">
             <label>국사명 <input id="b2cStation" placeholder="예: 안성국사"></label>
             <label>B2C 엑셀 <input id="b2cFile" type="file" accept=".xlsx,.xls"></label>
             <button id="saveB2CBtn" class="secondary-btn" type="button">등록 / 수정</button>
           </div>
-          <p class="floor-plan-help">선번장의 G열 노드명과 같은 직선도 시트를 그림으로 저장하고, 남색 도형 안의 셀명/B2C만 6글자 연속 일치로 검색합니다.</p>
+          <p class="floor-plan-help">선번장의 G열 노드명과 같은 직선도 시트를 그림으로 저장합니다. 기본 국사는 남색 도형 안의 셀명/B2C를 검색하고, 마평국사는 도형 밖의 검은색 셀명과 보라색 B2C(전용선명)를 검색 DB로 사용합니다. 검색어는 공백·기호를 제외하고 6글자 연속 일치로 찾습니다.</p>
           <p id="b2cMessage" class="floor-plan-message" role="status"></p>
           <div id="b2cList" class="floor-plans-list"></div>
         </article>
@@ -168,7 +181,55 @@
     </section>
   </main>
 
+  <dialog id="userAccountDialog" class="account-dialog">
+    <form id="userAccountForm" class="account-form">
+      <div class="account-dialog-head">
+        <h2>계정 생성</h2>
+        <button id="closeUserAccountDialogBtn" class="ghost-btn" type="button" aria-label="계정 생성 창 닫기">닫기</button>
+      </div>
+      <label>아이디
+        <input id="accountId" autocomplete="off" minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" required>
+      </label>
+      <label>이름
+        <input id="accountName" autocomplete="off" maxlength="100" required>
+      </label>
+      <label>권한
+        <select id="accountRole" required>
+          <option value="user">사용자</option>
+          <option value="admin">관리자</option>
+        </select>
+      </label>
+      <label>비밀번호
+        <input id="accountPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      </label>
+      <label>비밀번호 확인
+        <input id="accountPasswordConfirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      </label>
+      <p id="userAccountMessage" class="message" role="alert"></p>
+      <button class="primary-btn" type="submit">계정 생성</button>
+    </form>
+  </dialog>
+
+  <dialog id="passwordResetDialog" class="account-dialog">
+    <form id="passwordResetForm" class="account-form">
+      <div class="account-dialog-head">
+        <h2>비밀번호 재설정</h2>
+        <button id="closePasswordResetDialogBtn" class="ghost-btn" type="button" aria-label="비밀번호 재설정 창 닫기">닫기</button>
+      </div>
+      <p><strong id="passwordResetAccountId"></strong> 계정의 새 비밀번호를 관리자가 지정합니다.</p>
+      <input id="passwordResetTarget" type="hidden">
+      <label>새 비밀번호
+        <input id="newAccountPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      </label>
+      <label>새 비밀번호 확인
+        <input id="newAccountPasswordConfirm" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
+      </label>
+      <p id="passwordResetMessage" class="message" role="alert"></p>
+      <button class="primary-btn" type="submit">비밀번호 저장</button>
+    </form>
+  </dialog>
+
   <script src="assets/line-diagrams/anseong-vector/manifest-data.js?v=CATV0708ZOOM100"></script>
-  <script src="app.js?v=CATV0714PHOTOZOOMBACK"></script>
+  <script src="app.js?v=CATV0721MANAGEDAUTH1"></script>
 </body>
 </html>

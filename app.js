@@ -146,6 +146,8 @@ const sampleRecords = [
 const qs = (selector) => document.querySelector(selector);
 let pendingSearchRecords = [];
 let pendingB2CSearchRecords = [];
+let authenticatedUser = null;
+let managedUsers = [];
 
 function ensureSeedData() {
   suppressSharedDbDirty = true;
@@ -212,8 +214,11 @@ function createDbSourceId(prefix = "db") {
 }
 
 const APP_DB_NAME = "catvTransmissionApp";
-const APP_DB_VERSION = 1;
+const APP_DB_VERSION = 2;
 const B2C_DIAGRAM_STORE = "b2cDiagrams";
+const ADMIN_RECORD_INITIAL_LIMIT = 80;
+const ADMIN_RECORD_SEARCH_LIMIT = 160;
+let adminDataSearchTimer = null;
 let pdfJsRuntimePromise = null;
 const PRESET_LINE_DIAGRAMS = [
   {
@@ -313,8 +318,11 @@ function openAppDb() {
     const request = indexedDB.open(APP_DB_NAME, APP_DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
-      if (!db.objectStoreNames.contains(B2C_DIAGRAM_STORE)) {
-        db.createObjectStore(B2C_DIAGRAM_STORE, { keyPath: "id" });
+      const store = db.objectStoreNames.contains(B2C_DIAGRAM_STORE)
+        ? request.transaction.objectStore(B2C_DIAGRAM_STORE)
+        : db.createObjectStore(B2C_DIAGRAM_STORE, { keyPath: "id" });
+      if (!store.indexNames.contains("sourceId")) {
+        store.createIndex("sourceId", "sourceId", { unique: false });
       }
     };
     request.onsuccess = () => resolve(request.result);
@@ -334,8 +342,9 @@ async function loadB2CDiagrams(stationName = "") {
   try {
     const tx = db.transaction(B2C_DIAGRAM_STORE, "readonly");
     const diagrams = await requestToPromise(tx.objectStore(B2C_DIAGRAM_STORE).getAll());
-    const target = stationKey(stationName);
-    const selected = target ? diagrams.filter((diagram) => stationKey(diagram.stationName) === target) : diagrams;
+    const selected = String(stationName || "").trim()
+      ? diagrams.filter((diagram) => sameStationName(diagram.stationName, stationName))
+      : diagrams;
     const groups = selected.reduce((result, diagram) => {
       const key = `${stationKey(diagram.stationName)}::${diagram.sourceId || String(diagram.fileName || "").toLowerCase()}`;
       if (!result.has(key)) result.set(key, []);
@@ -391,15 +400,18 @@ async function saveB2CDiagramsForStation(stationName, diagrams, sourceId = "") {
 async function deleteB2CDiagramsForSource({ sourceId = "", stationName = "", fileName = "" } = {}) {
   const db = await openAppDb();
   try {
-    const existing = await requestToPromise(db.transaction(B2C_DIAGRAM_STORE, "readonly").objectStore(B2C_DIAGRAM_STORE).getAll());
+    const readStore = db.transaction(B2C_DIAGRAM_STORE, "readonly").objectStore(B2C_DIAGRAM_STORE);
+    const keys = sourceId && readStore.indexNames.contains("sourceId")
+      ? await requestToPromise(readStore.index("sourceId").getAllKeys(sourceId))
+      : (await requestToPromise(readStore.getAll()))
+        .filter((diagram) => sourceId
+          ? diagram.sourceId === sourceId
+          : sameStationName(diagram.stationName, stationName)
+            && String(diagram.fileName || "") === String(fileName || ""))
+        .map((diagram) => diagram.id);
     const tx = db.transaction(B2C_DIAGRAM_STORE, "readwrite");
     const store = tx.objectStore(B2C_DIAGRAM_STORE);
-    existing
-      .filter((diagram) => sourceId
-        ? diagram.sourceId === sourceId
-        : stationKey(diagram.stationName) === stationKey(stationName)
-          && String(diagram.fileName || "") === String(fileName || ""))
-      .forEach((diagram) => store.delete(diagram.id));
+    keys.forEach((key) => store.delete(key));
     await new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error || new Error("직선도 DB 삭제에 실패했습니다."));
@@ -616,7 +628,7 @@ async function deleteB2CDiagramsForStation(stationName) {
     const tx = db.transaction(B2C_DIAGRAM_STORE, "readwrite");
     const store = tx.objectStore(B2C_DIAGRAM_STORE);
     existing
-      .filter((diagram) => stationKey(diagram.stationName) === stationKey(stationName))
+      .filter((diagram) => sameStationName(diagram.stationName, stationName))
       .forEach((diagram) => store.delete(diagram.id));
     await new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
@@ -630,6 +642,27 @@ async function deleteB2CDiagramsForStation(stationName) {
 
 function stationKey(value) {
   return normalize(value).replaceAll(/\s+/g, "");
+}
+
+function floorPlanStationKey(value) {
+  let key = stationKey(String(value || "")
+    .replace(/\.(xlsx|xls|png|jpe?g|webp)$/i, "")
+    .replace(/[()[\]{}]/g, "")
+    .replace(/평면도/g, ""))
+    .replace(/[_/\\:>]+$/g, "");
+  if (key.endsWith("국사") && key.length > 2) key = key.slice(0, -2);
+
+  // 데이터 DB에는 `기남_송탄국사`처럼 권역명이 붙고, 평면도는
+  // `송탄국사.xlsx`처럼 실제 국사명만 쓰는 경우가 있다.
+  const segments = key.split(/[_/\\:>]+/).filter(Boolean);
+  return segments.at(-1) || key;
+}
+
+function sameStationName(left, right) {
+  const leftExact = stationKey(left);
+  const rightExact = stationKey(right);
+  if (!leftExact || !rightExact) return false;
+  return leftExact === rightExact || floorPlanStationKey(left) === floorPlanStationKey(right);
 }
 
 function normalizeRecord(record) {
@@ -654,11 +687,16 @@ function normalizeRecord(record) {
 }
 
 function showView(viewId) {
+  if (viewId === "adminView" && authenticatedUser?.role !== "admin") {
+    viewId = "loginView";
+    const message = qs("#loginMessage");
+    if (message) message.textContent = "관리자 인증이 필요합니다.";
+  }
   ["loginView", "userView", "rackView", "adminView"].forEach((id) => qs(`#${id}`).classList.add("hidden"));
   qs(`#${viewId}`).classList.remove("hidden");
 }
 
-async function requestAdminLogin(id, password) {
+async function requestLogin(id, password) {
   const response = await fetch("/api/auth/login", {
     method: "POST",
     credentials: "same-origin",
@@ -669,15 +707,16 @@ async function requestAdminLogin(id, password) {
   return { response, result };
 }
 
-async function restoreAdminSession() {
+async function restoreSession() {
   try {
     const response = await fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" });
     if (!response.ok) return null;
     const result = await response.json();
-    return result?.authenticated && result?.user?.role === "admin" ? result.user : null;
+    return result?.authenticated && ["user", "admin"].includes(result?.user?.role) ? result.user : null;
   } catch (error) {
     return null;
   }
+}
 
 async function login(event) {
   event.preventDefault();
@@ -689,39 +728,40 @@ async function login(event) {
   submitButton.disabled = true;
 
   try {
-    const { response, result } = await requestAdminLogin(id, password);
-    if (response.ok && result?.authenticated && result?.user?.role === "admin") {
-      authenticatedAdmin = result.user;
+    const { response, result } = await requestLogin(id, password);
+    if (response.ok && result?.authenticated && ["user", "admin"].includes(result?.user?.role)) {
+      authenticatedUser = result.user;
       message.textContent = "";
       qs("#loginForm").reset();
-      window.history.replaceState(null, "", "/admin");
-      showView("adminView");
-      window.requestAnimationFrame(() => renderAdmin());
+      if (authenticatedUser.role === "admin") {
+        window.history.replaceState(null, "", "/admin");
+        showView("adminView");
+        window.requestAnimationFrame(() => renderAdmin());
+      } else {
+        if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
+        showSearchScreen();
+      }
       return;
     }
+    message.textContent = result?.error || "아이디 또는 비밀번호를 확인해주세요.";
+    return;
   } catch (error) {
-    console.warn("관리자 인증 서버에 연결하지 못했습니다.", error);
+    console.warn("인증 서버에 연결하지 못했습니다.", error);
+    message.textContent = "인증 서버에 연결하지 못했습니다.";
   } finally {
     submitButton.disabled = false;
   }
-
-  message.textContent = "아이디 또는 비밀번호를 확인해주세요.";
 }
 
 async function logout() {
-  if (authenticatedAdmin || ["/admin", "/admin/"].includes(window.location.pathname)) {
+  if (authenticatedUser || ["/admin", "/admin/"].includes(window.location.pathname)) {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   }
-  authenticatedAdmin = null;
+  authenticatedUser = null;
   if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
   showView("loginView");
 }
 
-  if (viewId === "adminView" && authenticatedAdmin?.role !== "admin") {
-    viewId = "loginView";
-    const message = qs("#loginMessage");
-    if (message) message.textContent = "관리자 인증이 필요합니다.";
-  }
 function showSearchScreen() {
   showView("userView");
   renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
@@ -736,7 +776,6 @@ function looseMatch(value, query) {
   const key = normalize(query);
   if (!text || !key) return false;
   return text.includes(key) || (key.length >= 3 && key.includes(text));
-}
 }
 
 function b2cSearchMatch(value, query) {
@@ -854,11 +893,20 @@ function renderB2CSearchMatches(records) {
 }
 
 function stationAddressForB2C(stationName) {
-  const station = loadRecords().find((record) => stationKey(record.stationName) === stationKey(stationName));
+  const station = loadRecords().find((record) => sameStationName(record.stationName, stationName));
   return station?.stationAddress || "";
 }
 
 function b2cLineDiagramRecord(record, stationAddress = "") {
+  const lineDiagramSearchValues = [
+    record.serviceName,
+    record.cellName,
+    record.memo,
+    record.b2cName,
+    ...(record.searchValues || []),
+  ].map((value) => String(value || "").trim())
+    .filter((value) => value && !/^(?:CATV[\s_-]*)?(?:B2C|HFC|TX|RX|RN)$/i.test(value))
+    .filter((value, index, array) => array.indexOf(value) === index);
   return {
     stationName: record.stationName,
     stationAddress,
@@ -868,6 +916,8 @@ function b2cLineDiagramRecord(record, stationAddress = "") {
     memo: record.memo,
     otxMain: record.node,
     otxLine: record.line,
+    lineDiagramKind: "b2c",
+    lineDiagramSearchValues,
   };
 }
 
@@ -922,7 +972,7 @@ function renderB2CRecord(record) {
     const message = form.querySelector("[data-b2c-remark-message]");
     const query = String(input?.value || "").trim();
     if (!continuousMatchTokens(query).length) {
-      message.textContent = "직선도에서 찾을 글자를 공백 없이 6글자 이상 입력해주세요.";
+      message.textContent = "직선도에서 찾을 글자를 공백·기호 제외 6글자 이상 입력해주세요.";
       input?.focus();
       return;
     }
@@ -1376,7 +1426,7 @@ function handleMobileBack() {
   }
   if (!qs("#adminView").classList.contains("hidden")) {
     mobileExitBackAt = 0;
-    showView("loginView");
+    logout();
     restoreMobileBackGuard();
     return;
   }
@@ -1457,11 +1507,17 @@ function rackLocation(record, equipment) {
 }
 
 function normalizeRackUnit(value) {
-  return String(value || "")
+  const normalized = String(value || "")
     .trim()
-    .replace(/[\s_]/g, "")
+    .replace(/\s/g, "")
+    .replace(/_/g, "-")
     .replace(/[‐‑‒–—]/g, "-")
     .toUpperCase();
+  const separated = normalized.match(/^([1-9]\d?)-0?([1-9]\d?)$/);
+  if (separated) return `${Number(separated[1])}-${Number(separated[2])}`;
+  const compact = normalized.match(/^([1-9])(\d{2})$/);
+  if (compact && Number(compact[2]) > 0) return `${Number(compact[1])}-${Number(compact[2])}`;
+  return normalized;
 }
 
 function normalizePlanText(value) {
@@ -1661,24 +1717,43 @@ function renderFloorPlansAdmin() {
   const list = qs("#floorPlansList");
   if (!list) return;
   const plans = loadFloorPlans();
-  list.innerHTML = plans.length ? plans.map((plan, index) => `<div class="floor-plan-list-item"><strong>${escapeHtml(plan.stationName)}</strong><span>엑셀 평면도 · ${escapeHtml(plan.fileName)}${plan.createdAt ? ` · ${escapeHtml(new Date(plan.createdAt).toLocaleString("ko-KR"))}` : ""}</span><button type="button" data-delete-floor-plan="${index}">삭제</button></div>`).join("") : `<p>등록된 평면도가 없습니다.</p>`;
-  list.querySelectorAll("[data-delete-floor-plan]").forEach((button) => button.addEventListener("click", () => { const plans = loadFloorPlans(); plans.splice(Number(button.dataset.deleteFloorPlan), 1); saveFloorPlans(plans); renderFloorPlansAdmin(); }));
+  list.innerHTML = plans.length ? plans.map((plan, index) => {
+    const planType = plan.type === "image" ? "이미지 평면도" : "엑셀 평면도";
+    const coordinateCount = Object.keys(plan.rackCoordinates || {}).length;
+    const rackSummary = plan.type === "image"
+      ? ` · 검색 좌표 ${coordinateCount}개`
+      : (Array.isArray(plan.rackValues) ? ` · 랙 ${plan.rackValues.length}개 인식` : "");
+    return `<div class="floor-plan-list-item">
+      <strong>${escapeHtml(plan.stationName)}</strong>
+      <span>${planType} · ${escapeHtml(plan.fileName)}${plan.sheetName ? ` · 시트 ${escapeHtml(plan.sheetName)}` : ""}${rackSummary}${plan.updatedAt ? ` · 수정 ${escapeHtml(new Date(plan.updatedAt).toLocaleString("ko-KR"))}` : (plan.createdAt ? ` · ${escapeHtml(new Date(plan.createdAt).toLocaleString("ko-KR"))}` : "")}</span>
+      <div class="floor-plan-list-actions">
+        <button class="floor-plan-edit-btn" type="button" data-edit-floor-plan="${index}" ${plan.type === "image" ? "" : "disabled"}>수정</button>
+        <button type="button" data-delete-floor-plan="${index}">삭제</button>
+      </div>
+    </div>`;
+  }).join("") : `<p>등록된 평면도가 없습니다.</p>`;
+  list.querySelectorAll("[data-edit-floor-plan]").forEach((button) => button.addEventListener("click", () => {
+    editFloorPlan(Number(button.dataset.editFloorPlan));
+  }));
+  list.querySelectorAll("[data-delete-floor-plan]").forEach((button) => button.addEventListener("click", () => {
+    const plans = loadFloorPlans();
+    const index = Number(button.dataset.deleteFloorPlan);
+    const target = plans[index];
+    plans.splice(index, 1);
+    saveFloorPlans(plans);
+    if (pendingFloorPlanUpload?.editingPlanId && target?.id === pendingFloorPlanUpload.editingPlanId) {
+      cancelFloorPlanEdit();
+    } else if (Number.isInteger(pendingFloorPlanUpload?.editingPlanIndex) && index === pendingFloorPlanUpload.editingPlanIndex) {
+      cancelFloorPlanEdit();
+    }
+    renderFloorPlansAdmin();
+  }));
 }
 
-async function renderB2CAdmin() {
+function renderB2CAdmin() {
   const list = qs("#b2cList");
   if (!list) return;
 
-  let diagramGroups = {};
-  try {
-    diagramGroups = (await loadB2CDiagrams()).reduce((acc, diagram) => {
-      const key = stationKey(diagram.stationName);
-      acc[key] = (acc[key] || 0) + 1;
-      return acc;
-    }, {});
-  } catch (error) {
-    console.warn("B2C 직선도 목록을 불러오지 못했습니다.", error);
-  }
   const groups = loadB2CLines().reduce((acc, line) => {
     const key = line.sourceId || `${stationKey(line.stationName)}::${line.fileName || "legacy"}`;
     if (!acc[key]) {
@@ -1701,7 +1776,7 @@ async function renderB2CAdmin() {
       <span>B2C 전용선 ${station.count}건 · ${escapeHtml(station.fileName || "파일명 없음")}${station.createdAt ? ` · ${escapeHtml(new Date(station.createdAt).toLocaleString("ko-KR"))}` : ""}</span>
       <button type="button" data-delete-b2c-source="${stations.indexOf(station)}">삭제</button>
     </div>
-  `).join("") : `<p>등록된 B2C 전용선 DB가 없습니다.</p>`;
+  `).join("") : `<p>등록된 선번장(직선도) DB가 없습니다.</p>`;
 
   list.querySelectorAll("[data-delete-b2c-source]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1709,7 +1784,7 @@ async function renderB2CAdmin() {
       if (!target) return;
       const lines = loadB2CLines().filter((line) => target.sourceId
         ? line.sourceId !== target.sourceId
-        : !(stationKey(line.stationName) === stationKey(target.stationName) && line.fileName === target.fileName));
+        : !(sameStationName(line.stationName, target.stationName) && line.fileName === target.fileName));
       saveB2CLines(lines);
       try {
         await deleteB2CDiagramsForSource(target);
@@ -2041,9 +2116,10 @@ function excelPlanHtml(sheet, workbook) {
       const cell = sheet[address];
       const merge = mergeOrigin.get(`${row}:${col}`);
       const text = cell?.w ?? cell?.v ?? "";
+      const rackValue = normalizeRackUnit(text);
       const aboveText = row > range.s.r ? sheet[XLSX.utils.encode_cell({ r: row - 1, c: col })]?.w ?? "" : "";
       const isHeader = /^(OFD|Rack)$/i.test(String(text).trim());
-      const isRackValue = /^\d+-\d+$/.test(String(text).trim()) || /SKB|방송국간망/.test(String(text));
+      const isRackValue = /^\d{1,2}-\d{1,2}$/.test(rackValue) || /SKB|방송국간망/.test(String(text));
       const isEntrance = /출\s*입\s*구/.test(String(text));
       const isHeaderLowerCell = !text && /^(OFD|Rack)$/i.test(String(aboveText).trim());
       const isBlankMergedFrame = !text && Boolean(merge);
@@ -2056,13 +2132,293 @@ function excelPlanHtml(sheet, workbook) {
       const cellHeight = sumExcelSpanPixels(rowHeights, row - range.s.r, rowSpan);
       const fitStyle = isEntrance ? "" : fittedExcelTextStyle(text, cellWidth, cellHeight, cell, workbook);
       const cellStyle = [style, fitStyle].filter(Boolean).join(";");
-      cells.push(`<div class="excel-plan-cell${semantic}" data-excel-cell="${address}" data-rack-value="${isRackValue ? escapeHtml(String(text).trim()) : ""}" title="${escapeHtml(text)}" style="grid-column:${col - range.s.c + 1} / span ${columnSpan};grid-row:${row - range.s.r + 1} / span ${rowSpan};${cellStyle}">${escapeHtml(text)}</div>`);
+      cells.push(`<div class="excel-plan-cell${semantic}" data-excel-cell="${address}" data-rack-value="${isRackValue ? escapeHtml(rackValue) : ""}" title="${escapeHtml(text)}" style="grid-column:${col - range.s.c + 1} / span ${columnSpan};grid-row:${row - range.s.r + 1} / span ${rowSpan};${cellStyle}">${escapeHtml(text)}</div>`);
     }
   }
   return `<div class="excel-plan-canvas" style="grid-template-columns:${columns};grid-template-rows:${rows}">${cells.join("")}</div>`;
 }
 
-function saveFloorPlan() {
+function floorPlanRackValues(sheet) {
+  return [...new Set(Object.entries(sheet)
+    .filter(([address]) => /^[A-Z]+\d+$/.test(address))
+    .map(([, cell]) => normalizeRackUnit(cell?.w ?? cell?.v ?? ""))
+    .filter((value) => /^\d{1,2}-\d{1,2}$/.test(value)))];
+}
+
+let pendingFloorPlanUpload = null;
+
+function cloneFloorPlanCoordinates(coordinates = {}) {
+  return JSON.parse(JSON.stringify(coordinates));
+}
+
+function floorPlanCoordinateTemplate(...names) {
+  const stationKeys = names.map(floorPlanStationKey).filter(Boolean);
+  const result = {};
+  const add = (label, x, y, aliases = []) => {
+    result[normalizeRackUnit(label)] = {
+      x,
+      y,
+      label: String(label),
+      aliases: aliases.map(String).filter(Boolean),
+    };
+  };
+
+  if (stationKeys.includes("송탄")) {
+    [101, 102, 103, 104, 105, 106, 107].forEach((label, index) => add(label, 28.6 + (index * 8.34), 17.9));
+    [201, 202, 203, 204, 205, 206, 207, 208].forEach((label, index) => add(label, 20.2 + (index * 8.34), 35.2));
+    [301, 302, 303, 304, 305, 306].forEach((label, index) => add(label, 19.9 + (index * 8.34), 51.9));
+    [401, 402, 403, 404, 405].forEach((label, index) => add(label, 28.5 + (index * 8.34), 68.8));
+    add(501, 19.8, 84.7);
+  } else if (stationKeys.includes("안성")) {
+    add("시내향 144C", 11.7, 23.9, ["보개,현수향 144C"]);
+    add("송신향 144C", 70.2, 23.6, ["한경대향 288C"]);
+    add(100, 87.2, 21.6);
+    [101, 102, 103, 104, 105, 106, 107, 108, 109].forEach((label, index) => add(label, 87.2, 28.6 + (index * 7)));
+    [201, 202, 203, 204, 205].forEach((label, index) => add(label, 69.8, 34.4 + (index * 7.6)));
+    [301, 302, 303].forEach((label, index) => add(label, 54.9, 55.7 + (index * 7.1)));
+    [401, 402, 403].forEach((label, index) => add(label, 45.2, 49 + (index * 8.5)));
+    add(501, 73.7, 90.2);
+  }
+
+  return result;
+}
+
+function readFloorPlanFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("선택한 평면도 이미지를 읽지 못했습니다."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadFloorPlanImage(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("평면도 이미지 형식을 확인해주세요."));
+    image.src = source;
+  });
+}
+
+async function optimizeFloorPlanImage(file) {
+  const original = await readFloorPlanFile(file);
+  const image = await loadFloorPlanImage(original);
+  const maxDimension = 2200;
+  const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+  const width = Math.max(1, Math.round(image.naturalWidth * scale));
+  const height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("이미지 변환 기능을 사용할 수 없습니다.");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, 0, 0, width, height);
+  const webp = canvas.toDataURL("image/webp", .9);
+  const content = webp.startsWith("data:image/webp") && webp.length < original.length ? webp : original;
+  return { content, width, height, optimized: content === webp };
+}
+
+function renderFloorPlanCoordinateEditor() {
+  const editor = qs("#floorPlanCoordinateEditor");
+  const image = qs("#floorPlanCoordinateImage");
+  const markers = qs("#floorPlanCoordinateMarkers");
+  const list = qs("#floorPlanCoordinateList");
+  if (!editor || !image || !markers || !list) return;
+  editor.classList.toggle("hidden", !pendingFloorPlanUpload);
+  if (!pendingFloorPlanUpload) {
+    image.removeAttribute("src");
+    markers.innerHTML = "";
+    list.innerHTML = "";
+    return;
+  }
+
+  image.src = pendingFloorPlanUpload.content;
+  const entries = Object.entries(pendingFloorPlanUpload.rackCoordinates || {})
+    .sort(([, first], [, second]) => String(first.label).localeCompare(String(second.label), "ko", { numeric: true }));
+  markers.innerHTML = entries.map(([rack, point]) => `<span class="floor-coordinate-marker" data-coordinate-rack="${escapeHtml(rack)}" style="left:${Number(point.x).toFixed(3)}%;top:${Number(point.y).toFixed(3)}%"><b>${escapeHtml(point.label || rack)}</b></span>`).join("");
+  list.innerHTML = entries.length
+    ? entries.map(([rack, point]) => `<span class="floor-coordinate-list-item">
+        <button type="button" data-select-floor-coordinate="${escapeHtml(rack)}">${escapeHtml(point.label || rack)}</button>
+        <button type="button" data-remove-floor-coordinate="${escapeHtml(rack)}" aria-label="${escapeHtml(point.label || rack)} 좌표 삭제">×</button>
+      </span>`).join("")
+    : `<span>저장된 노드명·랙 좌표가 없습니다.</span>`;
+  list.querySelectorAll("[data-select-floor-coordinate]").forEach((button) => button.addEventListener("click", () => {
+    const point = pendingFloorPlanUpload.rackCoordinates[button.dataset.selectFloorCoordinate];
+    const input = qs("#floorPlanRackCoordinate");
+    if (input) {
+      input.value = point?.label || button.dataset.selectFloorCoordinate;
+      input.dataset.editingCoordinateKey = button.dataset.selectFloorCoordinate;
+      input.focus();
+      input.select();
+    }
+    const message = qs("#floorPlanMessage");
+    if (message) {
+      message.textContent = `${point?.label || button.dataset.selectFloorCoordinate}을(를) 선택했습니다. 이미지에서 새 위치를 클릭하면 좌표가 이동합니다.`;
+      message.classList.remove("is-error");
+    }
+  }));
+  list.querySelectorAll("[data-remove-floor-coordinate]").forEach((button) => button.addEventListener("click", () => {
+    const input = qs("#floorPlanRackCoordinate");
+    if (input?.dataset.editingCoordinateKey === button.dataset.removeFloorCoordinate) {
+      input.value = "";
+      delete input.dataset.editingCoordinateKey;
+    }
+    delete pendingFloorPlanUpload.rackCoordinates[button.dataset.removeFloorCoordinate];
+    renderFloorPlanCoordinateEditor();
+  }));
+}
+
+function resetFloorPlanForm() {
+  const stationInput = qs("#floorPlanStation");
+  const fileInput = qs("#floorPlanFile");
+  const coordinateInput = qs("#floorPlanRackCoordinate");
+  const saveButton = qs("#saveFloorPlanBtn");
+  const cancelButton = qs("#cancelFloorPlanEditBtn");
+  if (stationInput) stationInput.value = "";
+  if (fileInput) fileInput.value = "";
+  if (coordinateInput) coordinateInput.value = "";
+  if (coordinateInput) delete coordinateInput.dataset.editingCoordinateKey;
+  if (saveButton) saveButton.textContent = "등록 / 수정";
+  cancelButton?.classList.add("hidden");
+}
+
+function cancelFloorPlanEdit() {
+  pendingFloorPlanUpload = null;
+  resetFloorPlanForm();
+  renderFloorPlanCoordinateEditor();
+  const message = qs("#floorPlanMessage");
+  if (message) {
+    message.textContent = "";
+    message.classList.remove("is-error");
+  }
+}
+
+function editFloorPlan(index) {
+  const plan = loadFloorPlans()[index];
+  const message = qs("#floorPlanMessage");
+  if (!plan) return;
+  if (plan.type !== "image" || !plan.content) {
+    if (message) {
+      message.textContent = "기존 엑셀 평면도는 좌표 편집을 지원하지 않습니다. 이미지 평면도로 등록한 뒤 수정할 수 있습니다.";
+      message.classList.add("is-error");
+    }
+    return;
+  }
+  pendingFloorPlanUpload = {
+    content: plan.content,
+    width: Number(plan.imageWidth) || 0,
+    height: Number(plan.imageHeight) || 0,
+    fileName: plan.fileName || "등록 평면도",
+    rackCoordinates: cloneFloorPlanCoordinates(plan.rackCoordinates || {}),
+    editingPlanId: plan.id || "",
+    editingPlanIndex: index,
+    originalCreatedAt: plan.createdAt || "",
+  };
+  qs("#floorPlanStation").value = plan.stationName || "";
+  qs("#floorPlanFile").value = "";
+  qs("#floorPlanRackCoordinate").value = "";
+  delete qs("#floorPlanRackCoordinate").dataset.editingCoordinateKey;
+  qs("#saveFloorPlanBtn").textContent = "수정 저장";
+  qs("#cancelFloorPlanEditBtn")?.classList.remove("hidden");
+  renderFloorPlanCoordinateEditor();
+  if (message) {
+    message.textContent = `${plan.stationName} 평면도를 수정 중입니다. 기존 이미지를 유지하거나 새 이미지를 선택하고, 좌표를 추가·이동·삭제한 뒤 수정 저장을 누르세요.`;
+    message.classList.remove("is-error");
+  }
+  qs("#floorPlanCoordinateEditor")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function prepareFloorPlanImageUpload(event) {
+  const fileInput = event.currentTarget;
+  const file = fileInput?.files?.[0];
+  const message = qs("#floorPlanMessage");
+  const editingState = pendingFloorPlanUpload?.editingPlanId || Number.isInteger(pendingFloorPlanUpload?.editingPlanIndex)
+    ? pendingFloorPlanUpload
+    : null;
+  if (!file) {
+    if (!editingState) {
+      pendingFloorPlanUpload = null;
+      renderFloorPlanCoordinateEditor();
+    }
+    return;
+  }
+  if (!/^image\/(png|jpeg|webp)$/i.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)) {
+    if (!editingState) pendingFloorPlanUpload = null;
+    renderFloorPlanCoordinateEditor();
+    message.textContent = "평면도는 PNG, JPG, WebP 이미지만 등록할 수 있습니다.";
+    message.classList.add("is-error");
+    return;
+  }
+
+  message.textContent = `${file.name} 이미지를 준비하는 중입니다.`;
+  message.classList.remove("is-error");
+  try {
+    const prepared = await optimizeFloorPlanImage(file);
+    if (fileInput.files?.[0] !== file) return;
+    const stationName = qs("#floorPlanStation")?.value.trim() || "";
+    const rackCoordinates = editingState
+      ? cloneFloorPlanCoordinates(editingState.rackCoordinates || {})
+      : floorPlanCoordinateTemplate(stationName, file.name);
+    pendingFloorPlanUpload = {
+      ...prepared,
+      fileName: file.name,
+      rackCoordinates,
+      ...(editingState ? {
+        editingPlanId: editingState.editingPlanId || "",
+        editingPlanIndex: editingState.editingPlanIndex,
+        originalCreatedAt: editingState.originalCreatedAt || "",
+      } : {}),
+    };
+    renderFloorPlanCoordinateEditor();
+    const coordinateCount = Object.keys(rackCoordinates).length;
+    const sizeMb = (prepared.content.length * .75 / (1024 * 1024)).toFixed(2);
+    message.textContent = coordinateCount
+      ? `${file.name} 준비 완료 · 기본 검색 좌표 ${coordinateCount}개 · 저장 이미지 약 ${sizeMb}MB`
+      : `${file.name} 준비 완료 · 노드명 또는 랙 정보를 입력한 뒤 이미지에서 해당 위치를 클릭해주세요.`;
+  } catch (error) {
+    console.error("평면도 이미지 준비 실패", error);
+    if (!editingState) pendingFloorPlanUpload = null;
+    renderFloorPlanCoordinateEditor();
+    message.textContent = `평면도 이미지를 준비하지 못했습니다: ${error.message || "이미지 파일을 확인해주세요."}`;
+    message.classList.add("is-error");
+  }
+}
+
+function setFloorPlanCoordinate(event) {
+  if (!pendingFloorPlanUpload || event.target.closest(".floor-coordinate-marker")) return;
+  const image = qs("#floorPlanCoordinateImage");
+  const rackInput = qs("#floorPlanRackCoordinate");
+  const message = qs("#floorPlanMessage");
+  const rawRack = rackInput?.value.trim() || "";
+  const rack = normalizeRackUnit(rawRack);
+  if (!rack) {
+    message.textContent = "먼저 좌표를 지정할 노드명 또는 랙 정보를 입력해주세요.";
+    message.classList.add("is-error");
+    rackInput?.focus();
+    return;
+  }
+  const rect = image.getBoundingClientRect();
+  if (!rect.width || !rect.height || event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
+  const previousKey = rackInput?.dataset.editingCoordinateKey || "";
+  if (previousKey && previousKey !== rack) delete pendingFloorPlanUpload.rackCoordinates[previousKey];
+  pendingFloorPlanUpload.rackCoordinates[rack] = {
+    x: Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100)),
+    y: Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100)),
+    label: rawRack,
+  };
+  renderFloorPlanCoordinateEditor();
+  message.textContent = `${rawRack} 좌표를 저장했습니다. 다른 노드명 또는 랙 정보를 입력해 계속 지정할 수 있습니다.`;
+  message.classList.remove("is-error");
+  if (rackInput) delete rackInput.dataset.editingCoordinateKey;
+  rackInput?.select();
+}
+
+async function saveFloorPlan() {
   const stationInput = qs("#floorPlanStation");
   const fileInput = qs("#floorPlanFile");
   const message = qs("#floorPlanMessage");
@@ -2073,39 +2429,65 @@ function saveFloorPlan() {
   };
   const stationName = stationInput.value.trim();
   const file = fileInput.files[0];
-  if (!stationName || !file) return showMessage("국사명과 평면도 엑셀 파일을 모두 선택해주세요.", true);
-  if (!/\.(xlsx|xls)$/i.test(file.name)) return showMessage("국사 평면도는 엑셀 파일(.xlsx, .xls)만 등록할 수 있습니다.", true);
-  if (!window.XLSX) return showMessage("엑셀 처리 모듈을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.", true);
-  const reader = new FileReader();
-  reader.onload = (event) => {
-    try {
-      const workbook = XLSX.read(event.target.result, { type: "array", cellStyles: true, cellNF: true, cellText: true, sheetStubs: true, bookFiles: true });
-      const sheetName = workbook.SheetNames.find((name) => name.includes("평면도")) || workbook.SheetNames[0];
-      if (!sheetName || !workbook.Sheets[sheetName]) throw new Error("평면도 시트를 찾지 못했습니다.");
-      const sheet = restoreStyledEmptyCells(workbook.Sheets[sheetName], workbook, sheetName);
-      const plan = {
-        id: createDbSourceId("floor"),
-        stationName,
-        fileName: file.name,
-        createdAt: new Date().toISOString(),
-        type: "excel",
-        content: excelPlanHtml(sheet, workbook),
-      };
-      const plans = loadFloorPlans();
-      plans.push(plan);
-      saveFloorPlans(plans);
-      stationInput.value = "";
-      fileInput.value = "";
-      renderFloorPlansAdmin();
-      showMessage(`${stationName} 평면도 등록이 완료되었습니다.`);
-    } catch (error) {
-      console.error("평면도 업로드 실패", error);
-      showMessage(`평면도 등록에 실패했습니다: ${error.message || "엑셀 서식을 확인해주세요."}`, true);
+  const isEditing = Boolean(pendingFloorPlanUpload?.editingPlanId) || Number.isInteger(pendingFloorPlanUpload?.editingPlanIndex);
+  if (!stationName) return showMessage("국사명을 입력해주세요.", true);
+  if (!pendingFloorPlanUpload) return showMessage("평면도 이미지를 선택하거나 등록된 평면도의 수정 버튼을 눌러주세요.", true);
+  if (!isEditing && !file) return showMessage("국사명과 평면도 이미지를 모두 선택해주세요.", true);
+  if (file && pendingFloorPlanUpload.fileName !== file.name) return showMessage("이미지 준비가 끝난 뒤 다시 저장해주세요.", true);
+  const rackValues = Object.keys(pendingFloorPlanUpload.rackCoordinates || {});
+  if (!rackValues.length) return showMessage("조회 위치 표시를 위해 노드명 또는 랙 좌표를 한 개 이상 지정해주세요.", true);
+
+  try {
+    const fileName = pendingFloorPlanUpload.fileName;
+    const stationAliases = [...new Set([
+      stationName,
+      fileName.replace(/\.(png|jpe?g|webp)$/i, ""),
+    ].filter(Boolean))];
+    const plans = loadFloorPlans();
+    let editingIndex = -1;
+    if (isEditing) {
+      editingIndex = pendingFloorPlanUpload.editingPlanId
+        ? plans.findIndex((item) => item.id === pendingFloorPlanUpload.editingPlanId)
+        : pendingFloorPlanUpload.editingPlanIndex;
+      if (editingIndex < 0 || editingIndex >= plans.length) {
+        return showMessage("수정할 평면도 DB를 찾지 못했습니다. 목록을 새로 확인해주세요.", true);
+      }
     }
-  };
-  reader.onerror = () => showMessage("선택한 엑셀 파일을 읽지 못했습니다. 파일을 다시 선택해주세요.", true);
-  showMessage(`${file.name} 파일을 등록하는 중입니다.`);
-  reader.readAsArrayBuffer(file);
+    const previousPlan = editingIndex >= 0 ? plans[editingIndex] : null;
+    const now = new Date().toISOString();
+    const plan = {
+      ...(previousPlan || {}),
+      id: previousPlan?.id || createDbSourceId("floor"),
+      stationName,
+      stationAliases,
+      fileName,
+      rackValues,
+      rackCoordinates: pendingFloorPlanUpload.rackCoordinates,
+      imageWidth: pendingFloorPlanUpload.width,
+      imageHeight: pendingFloorPlanUpload.height,
+      createdAt: previousPlan?.createdAt || pendingFloorPlanUpload.originalCreatedAt || now,
+      updatedAt: isEditing ? now : "",
+      type: "image",
+      content: pendingFloorPlanUpload.content,
+    };
+    const planKey = floorPlanStationKey(stationName);
+    const remainingPlans = plans.filter((item, index) => {
+      if (index === editingIndex) return false;
+      const aliases = [item.stationName, item.sheetName, item.fileName, ...(item.stationAliases || [])];
+      return !aliases.some((alias) => floorPlanStationKey(alias) === planKey);
+    });
+    remainingPlans.push(plan);
+    saveFloorPlans(remainingPlans);
+    pendingFloorPlanUpload = null;
+    resetFloorPlanForm();
+    renderFloorPlanCoordinateEditor();
+    renderFloorPlansAdmin();
+    showMessage(`${stationName} 이미지 평면도 ${isEditing ? "수정" : "등록"}이 완료되었습니다. 검색 좌표 ${rackValues.length}개를 저장했습니다.`);
+  } catch (error) {
+    console.error("평면도 이미지 등록 실패", error);
+    const quotaMessage = error?.name === "QuotaExceededError" ? " 저장 공간이 부족합니다. 기존 고해상도 평면도를 삭제한 뒤 다시 시도해주세요." : "";
+    showMessage(`평면도 등록에 실패했습니다:${quotaMessage || ` ${error.message || "이미지 파일을 확인해주세요."}`}`, true);
+  }
 }
 
 function b2cCellText(value) {
@@ -3151,12 +3533,33 @@ async function drawingDiagramToImageAsset(diagram) {
   }
 }
 
+function requiresLocalExcelRenderer() {
+  return ["127.0.0.1", "localhost"].includes(window.location.hostname);
+}
+
+async function checkLineDiagramServer() {
+  if (!requiresLocalExcelRenderer()) return;
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 5000);
+  try {
+    const response = await fetch("/api/health", { cache: "no-store", signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const status = await response.json();
+    if (!status?.ok) throw new Error("변환 API 준비 상태를 확인하지 못했습니다.");
+  } catch (error) {
+    throw new Error("직선도 변환 서버가 응답하지 않습니다. '웹사이트 실행.cmd'를 다시 실행한 뒤 등록해주세요.", { cause: error });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
 async function excelRenderedLineDiagramImages(file) {
   if (!file || !/^https?:$/.test(window.location.protocol)) return new Map();
-  const requiresExcelRenderer = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+  const requiresExcelRenderer = requiresLocalExcelRenderer();
   try {
     const response = await fetch("/api/line-diagram-images", {
       method: "POST",
+      credentials: "same-origin",
       headers: {
         "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "x-file-name": encodeURIComponent(file.name || "workbook.xlsx"),
@@ -3164,7 +3567,10 @@ async function excelRenderedLineDiagramImages(file) {
       body: file,
     });
     if (!response.ok) {
-      throw new Error(`Excel 직선도 변환 서버 응답 오류 (${response.status})`);
+      const details = await response.json().catch(() => ({}));
+      throw new Error(details.error
+        ? `Excel 직선도 변환 실패: ${details.error}`
+        : `Excel 직선도 변환 서버 응답 오류 (${response.status})`);
     }
     const payload = await response.json();
     const renderedSheets = payload.sheets || [];
@@ -3191,7 +3597,10 @@ async function excelRenderedLineDiagramImages(file) {
     ]));
   } catch (error) {
     if (requiresExcelRenderer) {
-      throw new Error("직선도 변환 서버에 연결할 수 없습니다. 로컬 사이트 서버를 실행한 뒤 다시 업로드해주세요.", { cause: error });
+      if (error instanceof TypeError || error?.name === "AbortError") {
+        throw new Error("직선도 변환 서버에 연결할 수 없습니다. '웹사이트 실행.cmd'를 다시 실행한 뒤 업로드해주세요.", { cause: error });
+      }
+      throw error;
     }
     console.warn("Excel 원본 그림 변환을 사용할 수 없어 브라우저 변환으로 진행합니다.", error);
     return new Map();
@@ -3407,10 +3816,11 @@ async function parseB2CDiagrams(workbook, stationName, fileName, file) {
   return diagrams;
 }
 
-function saveB2CFile() {
+async function saveB2CFile() {
   const stationInput = qs("#b2cStation");
   const fileInput = qs("#b2cFile");
   const message = qs("#b2cMessage");
+  const saveButton = qs("#saveB2CBtn");
   const showMessage = (text, isError = false) => {
     if (!message) return;
     message.textContent = text;
@@ -3419,14 +3829,35 @@ function saveB2CFile() {
   const stationName = stationInput.value.trim();
   const file = fileInput.files[0];
 
-  if (!stationName || !file) return showMessage("국사명과 B2C 전용선 엑셀 파일을 모두 선택해주세요.", true);
-  if (!/\.(xlsx|xls)$/i.test(file.name)) return showMessage("B2C 전용선 DB는 엑셀 파일(.xlsx, .xls)만 등록할 수 있습니다.", true);
+  if (!stationName || !file) return showMessage("국사명과 선번장(직선도) 엑셀 파일을 모두 선택해주세요.", true);
+  if (!/\.(xlsx|xls)$/i.test(file.name)) return showMessage("선번장(직선도) DB는 엑셀 파일(.xlsx, .xls)만 등록할 수 있습니다.", true);
   if (!window.XLSX) return showMessage("엑셀 처리 모듈을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.", true);
+
+  try {
+    showMessage("직선도 변환 서버 연결을 확인하는 중입니다.");
+    await checkLineDiagramServer();
+  } catch (error) {
+    return showMessage(error.message, true);
+  }
+
+  if (saveButton) saveButton.disabled = true;
+  const startedAt = Date.now();
+  const progressTimer = window.setInterval(() => {
+    const seconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    showMessage(`${file.name} 파일을 변환·등록하는 중입니다 (${seconds.toLocaleString("ko-KR")}초). 최초 등록은 몇 분 걸릴 수 있으며 같은 파일 재등록은 빨라집니다.`);
+  }, 1000);
+  const finishProcessing = () => {
+    window.clearInterval(progressTimer);
+    if (saveButton) saveButton.disabled = false;
+  };
 
   const reader = new FileReader();
   reader.onload = async (event) => {
     try {
-      const workbook = XLSX.read(event.target.result, { type: "array", cellStyles: true, cellNF: true, cellText: true, cellDates: false, sheetStubs: true, bookFiles: true });
+      const workbookOptions = requiresLocalExcelRenderer()
+        ? { type: "array", cellDates: false, bookFiles: true }
+        : { type: "array", cellStyles: true, cellNF: true, cellText: true, cellDates: false, sheetStubs: true, bookFiles: true };
+      const workbook = XLSX.read(event.target.result, workbookOptions);
       const sourceId = createDbSourceId("b2c");
       const createdAt = new Date().toISOString();
       const parsedRows = parseB2CWorkbook(workbook, stationName, file.name).map((row) => ({
@@ -3442,36 +3873,126 @@ function saveB2CFile() {
       if (!parsedRows.length) throw new Error("Q~V열 검색 항목이 있는 전용선 데이터를 찾지 못했습니다.");
 
       localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
-      const remainingLines = loadB2CLines().filter((line) => !(
-        stationKey(line.stationName) === stationKey(stationName)
+      const existingLines = loadB2CLines();
+      const replacedLines = existingLines.filter((line) => (
+        sameStationName(line.stationName, stationName)
         && String(line.fileName || "") === String(file.name || "")
       ));
-      saveB2CLines([...remainingLines, ...parsedRows]);
-      await deleteB2CDiagramsForSource({ stationName, fileName: file.name });
+      const previousSourceIds = [...new Set(replacedLines.map((line) => line.sourceId).filter(Boolean))];
+      const remainingLines = existingLines.filter((line) => !replacedLines.includes(line));
+      if (!previousSourceIds.length) {
+        await deleteB2CDiagramsForSource({ stationName, fileName: file.name });
+      }
       await saveB2CDiagramsForStation(stationName, parsedDiagrams, sourceId);
+      saveB2CLines([...remainingLines, ...parsedRows]);
+      for (const previousSourceId of previousSourceIds) {
+        try {
+          await deleteB2CDiagramsForSource({ sourceId: previousSourceId });
+        } catch (error) {
+          console.warn("이전 직선도 DB 정리 실패", previousSourceId, error);
+        }
+      }
       stationInput.value = "";
       fileInput.value = "";
       renderB2CAdmin();
       const indexedTargetCount = parsedDiagrams.reduce((sum, diagram) => sum + (diagram.searchTargets?.length || 0), 0);
-      showMessage(`${stationName} B2C 전용선 DB ${parsedRows.length}건, 그림 직선도 ${parsedDiagrams.length}개, 남색 검색영역 ${indexedTargetCount}개 등록이 완료되었습니다.`);
+      showMessage(`${stationName} 선번장(직선도) DB ${parsedRows.length}건, 그림 직선도 ${parsedDiagrams.length}개, 셀/B2C 검색영역 ${indexedTargetCount}개 등록이 완료되었습니다.`);
     } catch (error) {
-      console.error("B2C 전용선 DB 업로드 실패", error);
-      showMessage(`B2C 전용선 DB 등록에 실패했습니다: ${error.message || "엑셀 양식을 확인해주세요."}`, true);
+      console.error("선번장(직선도) DB 업로드 실패", error);
+      showMessage(`선번장(직선도) DB 등록에 실패했습니다: ${error.message || "엑셀 양식을 확인해주세요."}`, true);
+    } finally {
+      finishProcessing();
     }
   };
-  reader.onerror = () => showMessage("선택한 엑셀 파일을 읽지 못했습니다. 파일을 다시 선택해주세요.", true);
-  showMessage(`${file.name} 파일을 등록하는 중입니다.`);
+  reader.onerror = () => {
+    finishProcessing();
+    showMessage("선택한 엑셀 파일을 읽지 못했습니다. 파일을 다시 선택해주세요.", true);
+  };
+  showMessage(`${file.name} 파일을 읽는 중입니다.`);
   reader.readAsArrayBuffer(file);
 }
 
-function rackMarkerPosition(rack) {
-  const [rowText, columnText] = String(rack || "").split("-");
-  const row = Number(rowText); const column = Number(columnText);
-  const rowY = { 1: 18, 2: 37, 3: 55, 4: 73, 5: 88 };
-  const rowWidths = { 1: 8, 2: 8, 3: 7, 4: 6, 5: 6 };
-  if (!rowY[row] || !column) return { left: "50%", top: "50%" };
-  const offset = row === 1 || row === 4 ? column : column - 1;
-  return { left: `${10 + ((offset + .5) / rowWidths[row]) * 74}%`, top: `${rowY[row]}%` };
+function normalizeFloorCoordinateLabel(value) {
+  return normalizeDiagramSearchText(value).replace(/RACK|랙|렉/g, "");
+}
+
+function splitFloorPlanLookupValue(value) {
+  const text = String(value || "").trim();
+  if (!text) return [];
+  return [text, ...text.split(/\s*\/\s*|\r?\n/).map((part) => part.trim())]
+    .filter((part, index, array) => part && array.indexOf(part) === index);
+}
+
+function floorPlanLookupValues(record, location, equipmentName, targetText = "") {
+  if (String(targetText || "").trim()) return splitFloorPlanLookupValue(targetText);
+  const values = splitFloorPlanLookupValue(location?.rack);
+  const equipmentKey = normalizeDiagramSearchText(equipmentName);
+  const nodeValues = equipmentKey.includes("OTX")
+    ? [record.otxMain]
+    : (equipmentKey.includes("ORX")
+      ? [record.orxMain]
+      : (equipmentKey.includes("예비") ? [record.backup] : []));
+  return [...values, ...nodeValues.flatMap(splitFloorPlanLookupValue)]
+    .filter((value, index, array) => value && array.indexOf(value) === index);
+}
+
+function floorPlanCoordinateEntries(plan) {
+  const entries = new Map();
+  const addEntries = (coordinates = {}) => {
+    Object.entries(coordinates).forEach(([key, point]) => {
+      const normalizedKey = normalizeFloorCoordinateLabel(key);
+      if (!normalizedKey || !point) return;
+      const previous = entries.get(normalizedKey);
+      const aliases = [...new Set([
+        ...(previous?.point?.aliases || []),
+        ...(point.aliases || []),
+      ].map(String).filter(Boolean))];
+      entries.set(normalizedKey, {
+        key,
+        point: { ...(previous?.point || {}), ...point, aliases },
+      });
+    });
+  };
+  addEntries(floorPlanCoordinateTemplate(plan?.stationName, plan?.fileName));
+  addEntries(plan?.rackCoordinates);
+  return [...entries.values()];
+}
+
+function floorPlanMarkerPosition(plan, targetValues = []) {
+  const lookups = targetValues
+    .map((value) => ({ value: String(value || "").trim(), key: normalizeFloorCoordinateLabel(value) }))
+    .filter((lookup) => lookup.key);
+  const entries = floorPlanCoordinateEntries(plan).map((entry) => ({
+    ...entry,
+    searchKeys: [entry.key, entry.point.label, ...(entry.point.aliases || [])]
+      .map(normalizeFloorCoordinateLabel)
+      .filter(Boolean),
+  }));
+  const findMatch = (allowContains = false) => {
+    for (const lookup of lookups) {
+      const entry = entries.find((candidate) => candidate.searchKeys.some((candidateKey) => {
+        if (candidateKey === lookup.key) return true;
+        if (!allowContains || /^\d+$/.test(candidateKey) || /^\d+$/.test(lookup.key)) return false;
+        return Math.min(candidateKey.length, lookup.key.length) >= 4
+          && (candidateKey.includes(lookup.key) || lookup.key.includes(candidateKey));
+      }));
+      if (entry) return { entry, lookup };
+    }
+    return null;
+  };
+  const matched = findMatch(false) || findMatch(true);
+  const point = matched?.entry?.point;
+  if (!point || !Number.isFinite(Number(point.x)) || !Number.isFinite(Number(point.y))) {
+    return { found: false, left: "50%", top: "50%", label: lookups[0]?.value || "", kind: "unknown" };
+  }
+  return {
+    found: true,
+    left: `${Math.max(0, Math.min(100, Number(point.x)))}%`,
+    top: `${Math.max(0, Math.min(100, Number(point.y)))}%`,
+    label: String(point.label || matched.entry.key || matched.lookup.value),
+    matchedValue: matched.lookup.value,
+    kind: /^\d+$/.test(matched.lookup.key) ? "rack" : "node",
+  };
 }
 
 function initFloorPlanTouchZoom(viewport) {
@@ -3498,28 +4019,40 @@ function initFloorPlanTouchZoom(viewport) {
 
   const unscaledSize = () => {
     const previousZoom = target.style.zoom;
+    const previousMarkerScale = target.style.getPropertyValue("--floor-plan-marker-scale");
     target.style.zoom = "1";
+    target.style.setProperty("--floor-plan-marker-scale", "1");
     prepareImagePlan();
     const rect = target.getBoundingClientRect();
     const width = Math.max(1, target.scrollWidth, rect.width);
     const height = Math.max(1, target.scrollHeight, rect.height);
     target.style.zoom = previousZoom;
+    if (previousMarkerScale) target.style.setProperty("--floor-plan-marker-scale", previousMarkerScale);
+    else target.style.removeProperty("--floor-plan-marker-scale");
     return { width, height };
   };
 
   const fitZoom = () => {
     const { width, height } = unscaledSize();
-    const availableWidth = Math.max(1, viewport.clientWidth - 2);
-    const availableHeight = Math.max(1, viewport.clientHeight - 2);
+    const viewportStyle = getComputedStyle(viewport);
+    const horizontalPadding = (Number.parseFloat(viewportStyle.paddingLeft) || 0) + (Number.parseFloat(viewportStyle.paddingRight) || 0);
+    const verticalPadding = (Number.parseFloat(viewportStyle.paddingTop) || 0) + (Number.parseFloat(viewportStyle.paddingBottom) || 0);
+    const availableWidth = Math.max(1, viewport.clientWidth - horizontalPadding - 2);
+    const availableHeight = Math.max(1, viewport.clientHeight - verticalPadding - 2);
     return Math.min(1, Math.max(0.08, Math.min(availableWidth / width, availableHeight / height) * 0.98));
   };
 
   const applyZoom = (nextZoom) => {
     zoom = clampZoom(nextZoom);
     target.style.zoom = String(zoom);
+    target.style.setProperty("--floor-plan-marker-scale", String(1 / zoom));
   };
 
   const configure = () => {
+    target.style.boxSizing = "";
+    target.style.width = "";
+    target.style.height = "";
+    target.style.padding = "";
     minZoom = fitZoom();
     applyZoom(minZoom);
     viewport.scrollLeft = 0;
@@ -3584,6 +4117,13 @@ function initFloorPlanTouchZoom(viewport) {
     if (!event.touches.length) gesture = null;
   }, { passive: true });
 
+  viewport.addEventListener("wheel", (event) => {
+    event.preventDefault();
+    const step = event.deltaY > 0 ? -.25 : .25;
+    setZoomAt(zoom + step, event.clientX, event.clientY);
+  }, { passive: false });
+  enableLineDiagramMousePan(viewport);
+
   const image = target.querySelector("img");
   if (image && !image.complete) image.addEventListener("load", configure, { once: true });
   else configure();
@@ -3603,22 +4143,39 @@ function initFloorPlanTouchZoom(viewport) {
 
 function resetFloorPlanOverview(viewport = qs("#rackPanel .floor-plan")) {
   if (!viewport || typeof viewport.__fitFloorPlanOverview !== "function") return;
-  window.requestAnimationFrame(() => {
-    viewport.__fitFloorPlanOverview();
-    window.requestAnimationFrame(() => viewport.__fitFloorPlanOverview());
-  });
+  window.requestAnimationFrame(() => viewport.__fitFloorPlanOverview());
+}
+
+function registeredFloorPlanFor(stationName) {
+  const targetKey = floorPlanStationKey(stationName);
+  if (!targetKey) return null;
+  return [...loadFloorPlans()].reverse().find((item) => {
+    const aliases = [item.stationName, item.sheetName, item.fileName, ...(item.stationAliases || [])];
+    return aliases.some((alias) => floorPlanStationKey(alias) === targetKey);
+  }) || null;
 }
 
 function applyRegisteredFloorPlan(record, location, equipmentName, targetText = "") {
-  const plan = [...loadFloorPlans()].reverse().find((item) => stationKey(item.stationName) === stationKey(record.stationName));
-  if (!plan) return;
+  const plan = registeredFloorPlanFor(record.stationName);
   const floorPlan = qs("#rackPanel .floor-plan");
   if (!floorPlan) return;
+  if (!plan) {
+    floorPlan.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">${escapeHtml(record.stationName)}와 일치하는 등록 평면도가 없습니다. 관리자 화면에서 국사명 또는 엑셀 파일명을 확인해주세요.</p>`);
+    return;
+  }
   floorPlan.classList.add("uploaded-floor-plan");
-  const marker = rackMarkerPosition(location.rack);
   const isTextTarget = Boolean(String(targetText || "").trim());
+  const lookupValues = floorPlanLookupValues(record, location, equipmentName, targetText);
   if (plan.type === "image") {
-    floorPlan.innerHTML = `<div class="uploaded-image-plan"><img src="${plan.content}" alt="${escapeHtml(record.stationName)} 평면도">${isTextTarget ? `<p class="uploaded-rack-warning">이미지 평면도에서는 노드명 ${escapeHtml(targetText)}을(를) 자동으로 찾을 수 없습니다. 엑셀 평면도를 등록하면 글자 기준으로 강조됩니다.</p>` : `<span class="uploaded-rack-marker" style="left:${marker.left};top:${marker.top}">${escapeHtml(location.rack)}<small>${equipmentName}</small></span>`}</div>`;
+    const marker = floorPlanMarkerPosition(plan, lookupValues);
+    const markerTitle = marker.kind === "rack" ? `RACK ${marker.label}` : (marker.matchedValue || marker.label);
+    const markerMarkup = marker.found
+      ? `<span class="uploaded-rack-marker" style="left:${marker.left};top:${marker.top}"><span class="uploaded-rack-marker-label"><b>${escapeHtml(markerTitle)}</b><small>${escapeHtml(equipmentName)} 위치</small></span></span>`
+      : "";
+    const warningMarkup = !marker.found
+      ? `<p class="uploaded-rack-warning">${escapeHtml(lookupValues.join(" / ") || "선택 항목")}과(와) 일치하는 좌표가 없습니다. 관리자 화면에서 노드명 또는 랙 정보를 입력하고 이미지 좌표를 지정해주세요.</p>`
+      : "";
+    floorPlan.innerHTML = `<div class="uploaded-image-plan"><img src="${plan.content}" alt="${escapeHtml(record.stationName)} 평면도">${markerMarkup}${warningMarkup}</div>`;
     initFloorPlanTouchZoom(floorPlan);
     return;
   }
@@ -3627,21 +4184,30 @@ function applyRegisteredFloorPlan(record, location, equipmentName, targetText = 
     if (!cell.textContent.trim() && /span\s+[2-9]/.test(cell.style.gridColumn) && /span\s+[2-9]/.test(cell.style.gridRow)) cell.classList.add("bordered");
   });
   fitUploadedExcelPlanText(floorPlan);
-  const targetValue = isTextTarget ? normalizePlanText(targetText) : normalizeRackUnit(location.rack);
   const candidates = [...floorPlan.querySelectorAll(".excel-plan-cell, [data-rack-value], td, th")];
-  const exactMatch = (cell) => (isTextTarget ? normalizePlanText(cell.textContent) : normalizeRackUnit(cell.dataset.rackValue || cell.textContent)) === targetValue;
-  const containsMatch = (cell) => {
-    if (!isTextTarget || !targetValue) return false;
-    const text = normalizePlanText(cell.textContent);
-    return Boolean(text) && (text.includes(targetValue) || targetValue.includes(text));
+  const findExcelMatch = (target) => {
+    const targetValue = normalizeFloorCoordinateLabel(target);
+    if (!targetValue) return null;
+    const cellValue = (cell) => normalizeFloorCoordinateLabel(cell.dataset.rackValue || cell.textContent);
+    return candidates.find((cell) => cellValue(cell) === targetValue)
+      || (!/^\d+$/.test(targetValue) && targetValue.length >= 4
+        ? candidates.find((cell) => {
+          const value = cellValue(cell);
+          return value.length >= 4 && (value.includes(targetValue) || targetValue.includes(value));
+        })
+        : null);
   };
-  const rackCell = targetValue ? candidates.find(exactMatch) || candidates.find(containsMatch) : null;
+  const matchedLookup = lookupValues
+    .map((value) => ({ value, cell: findExcelMatch(value) }))
+    .find((match) => match.cell);
+  const rackCell = matchedLookup?.cell || null;
   if (rackCell) {
     rackCell.classList.add("uploaded-rack-active");
-    if (!isTextTarget) rackCell.insertAdjacentHTML("beforeend", `<small>${equipmentName}</small>`);
-    fitTextElementToBox(rackCell, isTextTarget ? 3.8 : 3.4);
+    rackCell.insertAdjacentHTML("beforeend", `<small>${escapeHtml(equipmentName)} 위치</small>`);
+    fitTextElementToBox(rackCell, isTextTarget || !/^\d+$/.test(normalizeFloorCoordinateLabel(matchedLookup.value)) ? 3.8 : 3.4);
+    floorPlan.__floorPlanFocusTarget = rackCell;
   } else {
-    const targetLabel = isTextTarget ? `노드 ${targetText}` : `선택 랙 ${location.rack}`;
+    const targetLabel = lookupValues.join(" / ") || (isTextTarget ? targetText : location.rack);
     floorPlan.querySelector(".uploaded-excel-plan").insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">${escapeHtml(targetLabel)}을(를) 엑셀 평면도에서 찾지 못했습니다.</p>`);
   }
   initFloorPlanTouchZoom(floorPlan);
@@ -3653,30 +4219,30 @@ function diagramMatchKey(value) {
 
 function continuousMatchTokens(value) {
   const source = String(value || "");
+  const fullValue = normalizeDiagramSearchText(source);
   const matches = source.match(/[0-9A-Za-z가-힣#_-]{6,}/g) || [];
-  return matches
+  return [fullValue, ...matches
     .flatMap((token) => {
       const base = normalizeDiagramSearchText(token);
       const noHash = normalizeDiagramSearchText(token.replace(/^#+/, ""));
       const compact = normalizeDiagramSearchText(token.replace(/[^0-9A-Za-z가-힣]/g, ""));
       return [base, noHash, compact];
-    })
+    })]
     .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
 }
 
 function recordLineDiagramTokens(record, preferredText = "") {
   const preferredTokens = continuousMatchTokens(preferredText);
   if (String(preferredText || "").trim()) return preferredTokens;
-  const directValues = [
-    record.cellName,
-    record.onuCellConfig,
-    record.b2cName,
-    record.serviceName,
-  ];
+  const directValues = record.lineDiagramKind === "b2c"
+    ? (record.lineDiagramSearchValues || [record.serviceName, record.cellName, record.memo, record.b2cName])
+    : [record.cellName, record.onuCellConfig, record.b2cName, record.serviceName];
   const baseTokens = directValues.flatMap(continuousMatchTokens);
-  const station = stationKey(record.stationName);
+  if (record.lineDiagramKind === "b2c") {
+    return baseTokens.filter((token, index, array) => token && array.indexOf(token) === index);
+  }
   const matchedLines = loadB2CLines().filter((line) => {
-    if (stationKey(line.stationName) !== station) return false;
+    if (!sameStationName(line.stationName, record.stationName)) return false;
     const values = [line.serviceName, line.b2cName, line.cellName, ...(line.searchValues || [])];
     return baseTokens.some((token) => values.some((value) => {
       return Boolean(findContinuousDiagramMatch(value, [token]));
@@ -3692,10 +4258,15 @@ function recordLineDiagramTokens(record, preferredText = "") {
 }
 
 function recordLineDiagramNodes(record, preferredText = "") {
+  if (record.lineDiagramKind === "b2c") {
+    return [record.otxMain, record.orxMain, record.backup]
+      .flatMap((node) => String(node || "").split(/\s*\/\s*|\r?\n/))
+      .map((node) => node.trim())
+      .filter((node, index, array) => node && array.indexOf(node) === index);
+  }
   const tokens = recordLineDiagramTokens(record, preferredText);
-  const station = stationKey(record.stationName);
   const matchedLines = loadB2CLines().filter((line) => {
-    if (stationKey(line.stationName) !== station) return false;
+    if (!sameStationName(line.stationName, record.stationName)) return false;
     const values = [line.serviceName, line.b2cName, line.cellName, ...(line.searchValues || [])];
     return tokens.some((token) => values.some((value) => {
       return Boolean(findContinuousDiagramMatch(value, [token]));
@@ -3732,7 +4303,8 @@ function b2cDiagramNodeScore(diagram, nodeKeys) {
 }
 
 function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens, preferredText = "") {
-  const indexedMatches = matchedIndexedTargets(diagram.searchTargets || [], tokens);
+  const strictB2CMatch = record.lineDiagramKind === "b2c";
+  const indexedMatches = matchedIndexedTargets(diagram.searchTargets || [], tokens, { bestOnly: strictB2CMatch });
   const nodeScore = b2cDiagramNodeScore(diagram, nodeKeys);
   const exactIndexed = indexedMatches.filter((match) => match.fullTokenMatch).length;
   const directValues = String(preferredText || "").trim()
@@ -3747,7 +4319,9 @@ function scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens, preferredTe
     diagram,
     indexedMatches,
     nodeScore,
-    score: (indexedMatches.length * 1000) + (exactIndexed * 350) + (directMatches * 500) + nodeScore,
+    score: strictB2CMatch
+      ? ((indexedMatches[0]?.matchScore || 0) * 100) + (directMatches * 500) + nodeScore
+      : (indexedMatches.length * 1000) + (exactIndexed * 350) + (directMatches * 500) + nodeScore,
   };
 }
 
@@ -3760,6 +4334,7 @@ async function findB2CDiagramForRecord(record, preferredText = "") {
     .map((diagram) => scoreB2CDiagramForRecord(diagram, record, nodeKeys, tokens, preferredText))
     .filter((candidate) => candidate.score > 0)
     .sort((first, second) => {
+      if (record.lineDiagramKind === "b2c" && second.score !== first.score) return second.score - first.score;
       if (second.indexedMatches.length !== first.indexedMatches.length) return second.indexedMatches.length - first.indexedMatches.length;
       if (second.score !== first.score) return second.score - first.score;
       return String(first.diagram.sheetName || "").localeCompare(String(second.diagram.sheetName || ""), "ko");
@@ -3833,6 +4408,43 @@ function applyDrawingDiagramHighlights(root, tokens) {
   return matches.length;
 }
 
+function enableLineDiagramMousePan(viewport) {
+  let drag = null;
+
+  const finishDrag = (event) => {
+    if (!drag || (event.pointerId !== undefined && event.pointerId !== drag.pointerId)) return;
+    if (viewport.hasPointerCapture?.(drag.pointerId)) {
+      viewport.releasePointerCapture(drag.pointerId);
+    }
+    drag = null;
+    viewport.classList.remove("is-mouse-panning");
+  };
+
+  viewport.classList.add("mouse-pan-enabled");
+  viewport.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    drag = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      left: viewport.scrollLeft,
+      top: viewport.scrollTop,
+    };
+    viewport.setPointerCapture?.(event.pointerId);
+    viewport.classList.add("is-mouse-panning");
+    event.preventDefault();
+  });
+  viewport.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    viewport.scrollLeft = drag.left - (event.clientX - drag.x);
+    viewport.scrollTop = drag.top - (event.clientY - drag.y);
+    event.preventDefault();
+  });
+  viewport.addEventListener("pointerup", finishDrag);
+  viewport.addEventListener("pointercancel", finishDrag);
+  viewport.addEventListener("lostpointercapture", finishDrag);
+}
+
 function initLineDiagramZoom(root) {
   const viewport = root.querySelector(".line-diagram-canvas");
   const target = root.querySelector(".drawing-diagram-svg, .line-diagram-image, .excel-plan-canvas");
@@ -3871,6 +4483,12 @@ function initLineDiagramZoom(root) {
     }));
   };
 
+  const overviewZoomFor = () => {
+    if (!baseWidth) return minZoom;
+    const availableWidth = Math.max(1, viewport.clientWidth - 4);
+    return Math.min(maxZoom, Math.max(minZoom, Math.floor(availableWidth / baseWidth)));
+  };
+
   const mapPositionLabel = (element) => {
     const left = Number(element?.dataset?.mapLeft);
     const top = Number(element?.dataset?.mapTop);
@@ -3904,35 +4522,7 @@ function initLineDiagramZoom(root) {
     }
   };
 
-  const applyAtPoint = (nextZoom, clientX, clientY) => {
-    if (!ready) return;
-    const viewportRect = viewport.getBoundingClientRect();
-    const pointX = clientX - viewportRect.left;
-    const pointY = clientY - viewportRect.top;
-    const oldWidth = Math.max(1, target.getBoundingClientRect().width);
-    const oldHeight = Math.max(1, target.getBoundingClientRect().height);
-    const anchorX = (viewport.scrollLeft + pointX) / oldWidth;
-    const anchorY = (viewport.scrollTop + pointY) / oldHeight;
-    apply(nextZoom, false);
-    const newWidth = Math.max(1, target.getBoundingClientRect().width);
-    const newHeight = Math.max(1, target.getBoundingClientRect().height);
-    viewport.scrollLeft = Math.max(0, (anchorX * newWidth) - pointX);
-    viewport.scrollTop = Math.max(0, (anchorY * newHeight) - pointY);
-  };
-
-  const readableZoomFor = () => searchZoom;
-
-  const currentMatch = () => matches[matchIndex];
-
-  const applyAtCurrentMatch = (nextZoom) => {
-    const selected = currentMatch();
-    if (!selected) {
-      apply(nextZoom);
-      return;
-    }
-    apply(nextZoom, false);
-    centerOn(selected);
-  };
+  const readableZoomFor = () => Math.max(searchZoom, overviewZoomFor());
 
   const focusMatch = (index, autoZoom = true) => {
     if (!ready || !matches.length) return;
@@ -3991,7 +4581,7 @@ function initLineDiagramZoom(root) {
     target.dataset.baseWidth = String(sourceWidth);
     target.dataset.baseHeight = String(sourceHeight);
     ready = true;
-    apply(1, false);
+    apply(overviewZoomFor(), false);
     if (pendingMatches) {
       const queued = pendingMatches;
       pendingMatches = null;
@@ -3999,13 +4589,13 @@ function initLineDiagramZoom(root) {
     }
   };
 
-  zoomOut.addEventListener("click", () => applyAtCurrentMatch(zoom - 1));
+  zoomOut.addEventListener("click", () => apply(zoom - 1));
   zoomReset.addEventListener("click", () => {
-    apply(1, false);
+    apply(overviewZoomFor(), false);
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
   });
-  zoomIn.addEventListener("click", () => applyAtCurrentMatch(zoom + 1));
+  zoomIn.addEventListener("click", () => apply(zoom + 1));
   matchPrevious?.addEventListener("click", () => focusMatch(matchIndex - 1, true));
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => {
@@ -4016,27 +4606,19 @@ function initLineDiagramZoom(root) {
   viewport.addEventListener("wheel", (event) => {
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
-    if (matches.length) {
-      applyAtCurrentMatch(zoom + direction);
-    } else {
-      applyAtPoint(zoom + direction, event.clientX, event.clientY);
-    }
+    apply(zoom + direction);
   }, { passive: false });
+
+  enableLineDiagramMousePan(viewport);
 
   let touchGesture = null;
   const touchDistance = (first, second) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
-  const touchMidpoint = (first, second) => ({
-    x: (first.clientX + second.clientX) / 2,
-    y: (first.clientY + second.clientY) / 2,
-  });
   viewport.addEventListener("touchstart", (event) => {
     if (event.touches.length >= 2) {
-      const midpoint = touchMidpoint(event.touches[0], event.touches[1]);
       touchGesture = {
         type: "pinch",
         distance: Math.max(1, touchDistance(event.touches[0], event.touches[1])),
         zoom,
-        midpoint,
       };
       event.preventDefault();
       return;
@@ -4054,13 +4636,8 @@ function initLineDiagramZoom(root) {
   viewport.addEventListener("touchmove", (event) => {
     if (!touchGesture) return;
     if (touchGesture.type === "pinch" && event.touches.length >= 2) {
-      const midpoint = touchMidpoint(event.touches[0], event.touches[1]);
       const ratio = touchDistance(event.touches[0], event.touches[1]) / touchGesture.distance;
-      if (matches.length) {
-        applyAtCurrentMatch(touchGesture.zoom * ratio);
-      } else {
-        applyAtPoint(touchGesture.zoom * ratio, midpoint.x, midpoint.y);
-      }
+      apply(touchGesture.zoom * ratio);
       event.preventDefault();
       return;
     }
@@ -4281,18 +4858,6 @@ async function initPdfLineDiagramMap(root, diagram) {
 
   const readableLevelFor = () => searchLevel;
 
-  const currentMatch = () => matches[matchIndex];
-
-  const applyLevelAtCurrentMatch = (nextLevel) => {
-    const selected = currentMatch();
-    if (!selected) {
-      applyLevel(nextLevel);
-      return;
-    }
-    applyLevel(nextLevel, false);
-    requestAnimationFrame(() => centerOnMarker(selected));
-  };
-
   const mapPositionLabel = (marker) => {
     const left = Number(marker?.dataset?.mapLeft);
     const top = Number(marker?.dataset?.mapTop);
@@ -4333,14 +4898,14 @@ async function initPdfLineDiagramMap(root, diagram) {
     focusMatch(0, true);
   };
 
-  zoomOut.addEventListener("click", () => applyLevelAtCurrentMatch(level - 1));
+  zoomOut.addEventListener("click", () => applyLevel(level - 1));
   zoomReset.addEventListener("click", () => {
     applyLevel(minLevel, false);
     viewport.scrollLeft = 0;
     viewport.scrollTop = 0;
     scheduleRender();
   });
-  zoomIn.addEventListener("click", () => applyLevelAtCurrentMatch(level + 1));
+  zoomIn.addEventListener("click", () => applyLevel(level + 1));
   matchPrevious?.addEventListener("click", () => focusMatch(matchIndex - 1, true));
   matchNext?.addEventListener("click", () => focusMatch(matchIndex + 1, true));
   mapLocate?.addEventListener("click", () => focusMatch(matchIndex, true));
@@ -4349,16 +4914,10 @@ async function initPdfLineDiagramMap(root, diagram) {
     event.preventDefault();
     const direction = event.deltaY > 0 ? -1 : 1;
     const step = event.ctrlKey ? 0.75 : 0.5;
-    if (matches.length) {
-      applyLevelAtCurrentMatch(level + (direction * step));
-    } else {
-      const rect = viewport.getBoundingClientRect();
-      applyLevel(level + (direction * step), true, {
-        x: event.clientX - rect.left,
-        y: event.clientY - rect.top,
-      });
-    }
+    applyLevel(level + (direction * step));
   }, { passive: false });
+
+  enableLineDiagramMousePan(viewport);
 
   let touchGesture = null;
   const touchDistance = (first, second) => Math.hypot(second.clientX - first.clientX, second.clientY - first.clientY);
@@ -4385,14 +4944,7 @@ async function initPdfLineDiagramMap(root, diagram) {
     if (touchGesture.type === "pinch" && event.touches.length >= 2) {
       const ratio = touchDistance(event.touches[0], event.touches[1]) / touchGesture.distance;
       const levelDelta = Math.log2(Math.max(0.25, ratio)) * 2.2;
-      const rect = viewport.getBoundingClientRect();
-      const midpointX = ((event.touches[0].clientX + event.touches[1].clientX) / 2) - rect.left;
-      const midpointY = ((event.touches[0].clientY + event.touches[1].clientY) / 2) - rect.top;
-      if (matches.length) {
-        applyLevelAtCurrentMatch(touchGesture.level + levelDelta);
-      } else {
-        applyLevel(touchGesture.level + levelDelta, true, { x: midpointX, y: midpointY });
-      }
+      applyLevel(touchGesture.level + levelDelta);
       event.preventDefault();
     } else if (touchGesture.type === "pan" && event.touches.length === 1) {
       viewport.scrollLeft = touchGesture.left - (event.touches[0].clientX - touchGesture.x);
@@ -4409,30 +4961,184 @@ async function initPdfLineDiagramMap(root, diagram) {
   return { setMatches, focusMatch, setZoom: applyLevel };
 }
 
-function matchedIndexedTargets(searchTargets, uniqueTokens) {
+function longestContinuousDiagramMatch(targetValue, candidateValue, minimumLength = 6) {
+  const target = normalizeDiagramSearchText(targetValue);
+  const candidate = normalizeDiagramSearchText(candidateValue);
+  if (target.length < minimumLength || candidate.length < minimumLength) return "";
+  const shorter = target.length <= candidate.length ? target : candidate;
+  const longer = target.length <= candidate.length ? candidate : target;
+  if (longer.includes(shorter)) return shorter;
+  for (let length = shorter.length - 1; length >= minimumLength; length -= 1) {
+    for (let index = 0; index <= shorter.length - length; index += 1) {
+      const sequence = shorter.slice(index, index + length);
+      if (longer.includes(sequence)) return sequence;
+    }
+  }
+  return "";
+}
+
+function matchedIndexedTargets(searchTargets, uniqueTokens, { bestOnly = false } = {}) {
   return searchTargets.map((target, sourceIndex) => {
     const normalizedTarget = normalizeDiagramSearchText(target.text);
+    let bestMatch = null;
     for (let tokenIndex = 0; tokenIndex < uniqueTokens.length; tokenIndex += 1) {
       const token = uniqueTokens[tokenIndex];
-      const sequence = findContinuousDiagramMatch(normalizedTarget, [token]);
+      const sequence = longestContinuousDiagramMatch(normalizedTarget, token);
       if (!sequence) continue;
-      return {
+      const exact = normalizedTarget === token;
+      const fullTokenMatch = normalizedTarget.includes(token) || token.includes(normalizedTarget);
+      const relationBonus = exact ? 3000 : (fullTokenMatch ? 2000 : 1000);
+      const lengthRatio = sequence.length / Math.max(normalizedTarget.length, token.length, 1);
+      const matchScore = (sequence.length * 10000) + relationBonus + Math.round(lengthRatio * 1000);
+      const match = {
         target,
         sequence,
         tokenIndex,
-        fullTokenMatch: normalizedTarget.includes(token),
+        fullTokenMatch,
+        exact,
+        matchScore,
         sourceIndex,
       };
+      if (!bestMatch || match.matchScore > bestMatch.matchScore || (match.matchScore === bestMatch.matchScore && tokenIndex < bestMatch.tokenIndex)) {
+        bestMatch = match;
+      }
     }
-    return null;
+    return bestMatch;
   }).filter(Boolean).sort((first, second) => {
+    if (second.matchScore !== first.matchScore) return second.matchScore - first.matchScore;
     if (first.tokenIndex !== second.tokenIndex) return first.tokenIndex - second.tokenIndex;
     if (first.fullTokenMatch !== second.fullTokenMatch) return first.fullTokenMatch ? -1 : 1;
     return first.sourceIndex - second.sourceIndex;
-  });
+  }).filter((match, index, matches) => !bestOnly || match.matchScore === matches[0]?.matchScore);
 }
 
-function applyIndexedPdfHighlights(root, tokens, searchTargets = []) {
+function dominantInkBand(counts, maximumGap) {
+  const occupied = counts.map((count, index) => (count ? index : -1)).filter((index) => index >= 0);
+  if (!occupied.length) return null;
+  const bands = [];
+  let start = occupied[0];
+  let previous = occupied[0];
+  let score = counts[start];
+  occupied.slice(1).forEach((index) => {
+    if ((index - previous - 1) > maximumGap) {
+      bands.push({ start, end: previous, score });
+      start = index;
+      score = 0;
+    }
+    score += counts[index];
+    previous = index;
+  });
+  bands.push({ start, end: previous, score });
+  return bands.sort((first, second) => second.score - first.score)[0];
+}
+
+function remapCroppedSearchTargets(searchTargets, crop) {
+  return searchTargets.map((target) => {
+    const left = Number(target.left) / 100;
+    const top = Number(target.top) / 100;
+    const right = left + (Number(target.width) / 100);
+    const bottom = top + (Number(target.height) / 100);
+    const visibleLeft = Math.max(left, crop.left);
+    const visibleTop = Math.max(top, crop.top);
+    const visibleRight = Math.min(right, crop.right);
+    const visibleBottom = Math.min(bottom, crop.bottom);
+    if (visibleRight <= visibleLeft || visibleBottom <= visibleTop) return null;
+    return {
+      ...target,
+      left: ((visibleLeft - crop.left) / crop.width) * 100,
+      top: ((visibleTop - crop.top) / crop.height) * 100,
+      width: ((visibleRight - visibleLeft) / crop.width) * 100,
+      height: ((visibleBottom - visibleTop) / crop.height) * 100,
+    };
+  }).filter(Boolean);
+}
+
+async function cropLineDiagramImageWhitespace(root, searchTargets = []) {
+  const image = root?.querySelector(".line-diagram-image");
+  const status = root?.querySelector(".line-diagram-ocr-status");
+  if (!image) return searchTargets;
+  await waitForImageLoad(image);
+  const naturalWidth = image.naturalWidth;
+  const naturalHeight = image.naturalHeight;
+  if (!naturalWidth || !naturalHeight) return searchTargets;
+
+  if (status) status.textContent = "직선도 빈 여백을 정리하는 중...";
+  const scanScale = Math.min(1, 1400 / Math.max(naturalWidth, naturalHeight));
+  const scanWidth = Math.max(1, Math.round(naturalWidth * scanScale));
+  const scanHeight = Math.max(1, Math.round(naturalHeight * scanScale));
+  const scanCanvas = document.createElement("canvas");
+  scanCanvas.width = scanWidth;
+  scanCanvas.height = scanHeight;
+  const scanContext = scanCanvas.getContext("2d", { alpha: false, willReadFrequently: true });
+  if (!scanContext) return searchTargets;
+  scanContext.fillStyle = "#fff";
+  scanContext.fillRect(0, 0, scanWidth, scanHeight);
+  scanContext.drawImage(image, 0, 0, scanWidth, scanHeight);
+  const pixels = scanContext.getImageData(0, 0, scanWidth, scanHeight).data;
+  const columns = new Uint32Array(scanWidth);
+  const rows = new Uint32Array(scanHeight);
+  let inkPixels = 0;
+  for (let y = 0; y < scanHeight; y += 1) {
+    for (let x = 0; x < scanWidth; x += 1) {
+      const offset = ((y * scanWidth) + x) * 4;
+      if (pixels[offset] >= 245 && pixels[offset + 1] >= 245 && pixels[offset + 2] >= 245) continue;
+      columns[x] += 1;
+      rows[y] += 1;
+      inkPixels += 1;
+    }
+  }
+  if (!inkPixels) return searchTargets;
+
+  const columnBand = dominantInkBand([...columns], Math.max(3, Math.round(scanWidth / 80)));
+  const rowBand = dominantInkBand([...rows], Math.max(3, Math.round(scanHeight / 80)));
+  const occupiedColumns = [...columns].map((count, index) => (count ? index : -1)).filter((index) => index >= 0);
+  const occupiedRows = [...rows].map((count, index) => (count ? index : -1)).filter((index) => index >= 0);
+  let left = columnBand && columnBand.score >= inkPixels * 0.65 ? columnBand.start : occupiedColumns[0];
+  let right = columnBand && columnBand.score >= inkPixels * 0.65 ? columnBand.end : occupiedColumns.at(-1);
+  let top = rowBand && rowBand.score >= inkPixels * 0.65 ? rowBand.start : occupiedRows[0];
+  let bottom = rowBand && rowBand.score >= inkPixels * 0.65 ? rowBand.end : occupiedRows.at(-1);
+  const padding = Math.max(4, Math.round(Math.max(right - left, bottom - top) * 0.012));
+  left = Math.max(0, left - padding);
+  top = Math.max(0, top - padding);
+  right = Math.min(scanWidth - 1, right + padding);
+  bottom = Math.min(scanHeight - 1, bottom + padding);
+
+  const crop = {
+    left: left / scanWidth,
+    top: top / scanHeight,
+    right: (right + 1) / scanWidth,
+    bottom: (bottom + 1) / scanHeight,
+  };
+  crop.width = crop.right - crop.left;
+  crop.height = crop.bottom - crop.top;
+  if (crop.width * crop.height > 0.92 || crop.width <= 0 || crop.height <= 0) return searchTargets;
+
+  const sourceX = Math.max(0, Math.floor(crop.left * naturalWidth));
+  const sourceY = Math.max(0, Math.floor(crop.top * naturalHeight));
+  const sourceWidth = Math.min(naturalWidth - sourceX, Math.ceil(crop.width * naturalWidth));
+  const sourceHeight = Math.min(naturalHeight - sourceY, Math.ceil(crop.height * naturalHeight));
+  const outputScale = Math.min(1, 10000 / Math.max(sourceWidth, sourceHeight), Math.sqrt(70000000 / Math.max(1, sourceWidth * sourceHeight)));
+  const outputWidth = Math.max(1, Math.round(sourceWidth * outputScale));
+  const outputHeight = Math.max(1, Math.round(sourceHeight * outputScale));
+  const outputCanvas = document.createElement("canvas");
+  outputCanvas.width = outputWidth;
+  outputCanvas.height = outputHeight;
+  const outputContext = outputCanvas.getContext("2d", { alpha: false });
+  if (!outputContext) return searchTargets;
+  outputContext.fillStyle = "#fff";
+  outputContext.fillRect(0, 0, outputWidth, outputHeight);
+  outputContext.imageSmoothingEnabled = outputScale < 1;
+  outputContext.imageSmoothingQuality = "high";
+  outputContext.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, outputWidth, outputHeight);
+  image.src = outputCanvas.toDataURL("image/png");
+  await waitForImageLoad(image);
+  image.dataset.baseWidth = String(outputWidth);
+  image.dataset.baseHeight = String(outputHeight);
+  root.dataset.diagramCrop = `${Math.round((1 - (crop.width * crop.height)) * 100)}%`;
+  return remapCroppedSearchTargets(searchTargets, crop);
+}
+
+function applyIndexedPdfHighlights(root, tokens, searchTargets = [], options = {}) {
   const shell = root.closest(".line-diagram-pdf-shell");
   const overlay = shell?.querySelector(".line-diagram-pdf-overlay");
   const status = shell?.querySelector(".line-diagram-ocr-status");
@@ -4441,7 +5147,7 @@ function applyIndexedPdfHighlights(root, tokens, searchTargets = []) {
   const uniqueTokens = tokens
     .map(normalizeDiagramSearchText)
     .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
-  const matches = matchedIndexedTargets(searchTargets, uniqueTokens);
+  const matches = matchedIndexedTargets(searchTargets, uniqueTokens, options);
   matches.forEach(({ target, sequence }) => {
     const marker = document.createElement("span");
     marker.className = "line-diagram-index-marker line-diagram-active";
@@ -4458,12 +5164,12 @@ function applyIndexedPdfHighlights(root, tokens, searchTargets = []) {
   if (status) {
     status.textContent = matches.length
       ? `벡터 직선도에서 6글자 연속 일치 ${matches.length}개소를 표시했습니다. 확대해도 글자가 깨지지 않습니다.`
-      : "남색 도형에서 6글자 연속 일치 항목을 찾지 못했습니다.";
+      : "직선도 검색 글자에서 6글자 연속 일치 항목을 찾지 못했습니다.";
   }
   return matches.length;
 }
 
-async function applyIndexedImageHighlights(root, tokens, searchTargets = []) {
+async function applyIndexedImageHighlights(root, tokens, searchTargets = [], options = {}) {
   const image = root.querySelector(".line-diagram-image");
   const overlay = root.querySelector(".line-diagram-image-overlay");
   const status = root.querySelector(".line-diagram-ocr-status");
@@ -4473,7 +5179,7 @@ async function applyIndexedImageHighlights(root, tokens, searchTargets = []) {
   const uniqueTokens = tokens
     .map(normalizeDiagramSearchText)
     .filter((token, index, array) => token.length >= 6 && array.indexOf(token) === index);
-  const matches = matchedIndexedTargets(searchTargets, uniqueTokens);
+  const matches = matchedIndexedTargets(searchTargets, uniqueTokens, options);
 
   matches.forEach(({ target, sequence }) => {
     const marker = document.createElement("span");
@@ -4490,9 +5196,10 @@ async function applyIndexedImageHighlights(root, tokens, searchTargets = []) {
     overlay.appendChild(marker);
   });
   if (status) {
+    const cropNotice = root.dataset.diagramCrop ? `빈 여백 ${root.dataset.diagramCrop} 정리 · ` : "";
     status.textContent = matches.length
-      ? `남색 도형에서 6글자 연속 일치 ${matches.length}개소를 표시했습니다.`
-      : "남색 도형에서 6글자 연속 일치 항목을 찾지 못했습니다.";
+      ? `${cropNotice}직선도 검색 글자에서 6글자 연속 일치 ${matches.length}개소를 표시했습니다.`
+      : `${cropNotice}직선도 검색 글자에서 6글자 연속 일치 항목을 찾지 못했습니다.`;
   }
   return matches.length;
 }
@@ -4519,8 +5226,8 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
           <dl class="rack-meta"><div><dt>국사</dt><dd>${escapeHtml(record.stationName || "-")}</dd></div></dl>
         </div>
         <p class="uploaded-rack-warning">${preferredText
-          ? `입력한 “${escapeHtml(preferredText)}”과(와) 6글자 연속 일치하는 남색 도형을 해당 국사의 직선도에서 찾지 못했습니다.`
-          : "등록된 B2C 직선도가 없거나 이전 검은 화면 형식입니다. 관리자 화면에서 해당 국사의 B2C 전용선 DB를 다시 업로드해주세요."}</p>
+          ? `입력한 “${escapeHtml(preferredText)}”과(와) 공백·기호 제외 6글자 연속 일치하는 검색 글자를 해당 국사의 직선도에서 찾지 못했습니다.`
+          : "등록된 B2C 직선도가 없거나 이전 검은 화면 형식입니다. 관리자 화면에서 해당 국사의 선번장(직선도) DB를 다시 업로드해주세요."}</p>
       </section>`;
     showView("rackView");
     return;
@@ -4537,7 +5244,7 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
         </dl>
       </div>
       <div class="line-diagram-route"><strong>연결 경로</strong><span>국사</span><b>→</b><span>광케이블</span><b>→</b><span>함체</span><b>→</b><span>셀 / B2C</span></div>
-      <div class="diagram-legend"><span class="legend-active"></span> 남색 도형 내부의 셀명/전용선명 6글자 연속 일치 항목만 표시</div>
+      <div class="diagram-legend"><span class="legend-active"></span> 기본 국사는 남색 도형, 마평국사는 검은색 셀명·보라색 전용선명의 6글자 연속 일치 항목 표시</div>
       <div class="line-diagram-zoom-toolbar" aria-label="직선도 확대 축소">
         <button type="button" data-diagram-zoom-out aria-label="직선도 축소">−</button>
         <button type="button" data-diagram-zoom-reset>원본</button>
@@ -4560,13 +5267,14 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
       ${diagram.type === "pdf-map"
         ? `<div class="line-diagram-pdf-shell"><div class="uploaded-floor-plan line-diagram-canvas pdf-line-diagram-canvas"><div class="line-diagram-pdf-world"><canvas class="line-diagram-pdf-canvas" aria-label="${escapeHtml(diagram.sheetName || "벡터 직선도")}"></canvas></div></div><div class="line-diagram-pdf-overlay"></div><p class="line-diagram-ocr-status">벡터 직선도와 검색 위치를 불러오는 중...</p></div>`
         : ["image", "image-map"].includes(diagram.type)
-        ? `<div class="uploaded-floor-plan line-diagram-canvas image-line-diagram-canvas"><div class="line-diagram-image-wrap"><img class="line-diagram-image" src="${diagram.content}" alt="${escapeHtml(diagram.sheetName || "직선도")}"><div class="line-diagram-image-overlay"></div></div><p class="line-diagram-ocr-status">남색 도형 검색 인덱스 확인 중...</p></div>`
+        ? `<div class="uploaded-floor-plan line-diagram-canvas image-line-diagram-canvas"><div class="line-diagram-image-wrap"><img class="line-diagram-image" src="${diagram.content}" alt="${escapeHtml(diagram.sheetName || "직선도")}"><div class="line-diagram-image-overlay"></div></div><p class="line-diagram-ocr-status">셀/B2C 검색 인덱스 확인 중...</p></div>`
         : `<div class="uploaded-floor-plan line-diagram-canvas"><div class="${diagram.type === "drawing" ? "uploaded-drawing-plan" : "uploaded-excel-plan"}">${diagram.content}</div></div>`}
     </section>`;
 
   showView("rackView");
   const rackPanel = qs("#rackPanel");
   let effectiveDiagramType = diagram.type;
+  let activeSearchTargets = diagram.searchTargets || [];
   let zoomController = null;
   let canvas = rackPanel.querySelector(".line-diagram-canvas");
   if (diagram.type === "pdf-map") {
@@ -4593,16 +5301,21 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
         </div>`;
       effectiveDiagramType = "image-map";
       canvas = rackPanel.querySelector(".line-diagram-canvas");
+      activeSearchTargets = await cropLineDiagramImageWhitespace(canvas, activeSearchTargets);
       zoomController = initLineDiagramZoom(rackPanel);
     }
   } else {
+    if (["image", "image-map"].includes(effectiveDiagramType)) {
+      activeSearchTargets = await cropLineDiagramImageWhitespace(canvas, activeSearchTargets);
+    }
     zoomController = initLineDiagramZoom(rackPanel);
   }
   let matchedCount = 0;
+  const indexedMatchOptions = { bestOnly: type === "b2c" };
   if (effectiveDiagramType === "pdf-map") {
-    matchedCount = applyIndexedPdfHighlights(canvas, tokens, diagram.searchTargets || []);
+    matchedCount = applyIndexedPdfHighlights(canvas, tokens, activeSearchTargets, indexedMatchOptions);
   } else if (effectiveDiagramType === "image-map") {
-    matchedCount = await applyIndexedImageHighlights(canvas, tokens, diagram.searchTargets || []);
+    matchedCount = await applyIndexedImageHighlights(canvas, tokens, activeSearchTargets, indexedMatchOptions);
   } else if (effectiveDiagramType === "image") {
     const status = canvas.querySelector(".line-diagram-ocr-status");
     if (status) status.textContent = "검색 인덱스가 없는 그림입니다. 관리자 화면에서 엑셀 파일을 다시 등록해주세요.";
@@ -4617,16 +5330,191 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
   if (!matchedCount) {
     const target = qs("#rackPanel .uploaded-excel-plan") || qs("#rackPanel .uploaded-drawing-plan") || qs("#rackPanel .line-diagram-canvas");
     const searchLabel = preferredText || record.cellName || record.serviceName || "해당 셀/B2C";
-    target.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">남색 도형에서 ${escapeHtml(searchLabel)}과(와) 6글자 연속 일치하는 항목을 찾지 못했습니다.</p>`);
+    target.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">직선도 검색 글자에서 ${escapeHtml(searchLabel)}과(와) 공백·기호 제외 6글자 연속 일치하는 항목을 찾지 못했습니다.</p>`);
   }
 }
 
 function renderAdmin() {
-  renderEditableTable("usersTable", userColumns, loadUsers(), saveUsers);
-  renderEditableTable("dataTable", recordColumns, filteredAdminRecords(), saveRecords);
+  renderManagedUsers();
+  renderDataAdminTable();
   renderFloorPlansAdmin();
   renderB2CAdmin();
   renderSharedDbAdmin();
+}
+
+function setUsersTableMessage(text, isError = false) {
+  const message = qs("#usersTableMessage");
+  if (!message) return;
+  message.textContent = text;
+  message.classList.toggle("is-error", isError);
+}
+
+async function adminUsersRequest(path = "", options = {}) {
+  const response = await fetch(`/api/admin/users${path}`, {
+    credentials: "same-origin",
+    ...options,
+    headers: {
+      ...(options.body ? { "content-type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const result = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    await logout();
+    throw new Error("관리자 세션이 만료되었습니다. 다시 로그인해주세요.");
+  }
+  if (!response.ok) throw new Error(result?.error || "계정 요청을 처리하지 못했습니다.");
+  return result;
+}
+
+async function renderManagedUsers() {
+  const table = qs("#usersTable");
+  if (!table) return;
+  table.innerHTML = "<tbody><tr><td>계정 DB를 불러오는 중입니다.</td></tr></tbody>";
+  setUsersTableMessage("");
+  try {
+    const result = await adminUsersRequest();
+    managedUsers = Array.isArray(result.users) ? result.users : [];
+    const rows = managedUsers.map((account) => {
+      const passwordState = account.passwordConfigured ? "설정됨" : "미설정";
+      const status = account.disabled ? "잠김" : "사용 가능";
+      const actions = account.rootAccount
+        ? '<span class="account-root-note">환경변수 관리</span>'
+        : `<div class="account-actions">
+            <button class="secondary-btn" type="button" data-account-action="password" data-account-id="${escapeHtml(account.id)}">비밀번호 설정</button>
+            <button class="ghost-btn" type="button" data-account-action="toggle" data-account-id="${escapeHtml(account.id)}">${account.disabled ? "잠금 해제" : "계정 잠금"}</button>
+            <button class="delete-btn" type="button" data-account-action="delete" data-account-id="${escapeHtml(account.id)}">삭제</button>
+          </div>`;
+      return `<tr>
+        <td>${escapeHtml(account.id)}</td>
+        <td>${escapeHtml(account.name)}</td>
+        <td>${account.role === "admin" ? "관리자" : "사용자"}</td>
+        <td><span class="account-status ${account.passwordConfigured ? "is-ready" : "is-pending"}">${passwordState}</span></td>
+        <td><span class="account-status ${account.disabled ? "is-locked" : "is-ready"}">${status}</span></td>
+        <td>${actions}</td>
+      </tr>`;
+    }).join("");
+    table.innerHTML = `<thead><tr><th>아이디</th><th>이름</th><th>권한</th><th>비밀번호</th><th>상태</th><th>관리</th></tr></thead><tbody>${rows || '<tr><td colspan="6">등록된 계정이 없습니다.</td></tr>'}</tbody>`;
+    table.querySelectorAll("[data-account-action]").forEach((button) => {
+      button.addEventListener("click", () => handleManagedUserAction(button.dataset.accountAction, button.dataset.accountId));
+    });
+    setUsersTableMessage(`${managedUsers.length.toLocaleString("ko-KR")}개 계정이 등록되어 있습니다.`);
+  } catch (error) {
+    table.innerHTML = "<tbody><tr><td>계정 DB를 불러오지 못했습니다.</td></tr></tbody>";
+    setUsersTableMessage(error.message, true);
+  }
+}
+
+function openUserAccountDialog() {
+  const dialog = qs("#userAccountDialog");
+  qs("#userAccountForm").reset();
+  qs("#userAccountMessage").textContent = "";
+  dialog.showModal();
+  window.setTimeout(() => qs("#accountId").focus(), 0);
+}
+
+function openPasswordResetDialog(accountId) {
+  const dialog = qs("#passwordResetDialog");
+  qs("#passwordResetForm").reset();
+  qs("#passwordResetTarget").value = accountId;
+  qs("#passwordResetAccountId").textContent = accountId;
+  qs("#passwordResetMessage").textContent = "";
+  dialog.showModal();
+  window.setTimeout(() => qs("#newAccountPassword").focus(), 0);
+}
+
+async function createManagedUser(event) {
+  event.preventDefault();
+  const password = qs("#accountPassword").value;
+  const passwordConfirm = qs("#accountPasswordConfirm").value;
+  const message = qs("#userAccountMessage");
+  if (password !== passwordConfirm) {
+    message.textContent = "비밀번호 확인이 일치하지 않습니다.";
+    return;
+  }
+  const submitButton = event.currentTarget.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  message.textContent = "계정을 생성하는 중입니다.";
+  try {
+    await adminUsersRequest("", {
+      method: "POST",
+      body: JSON.stringify({
+        id: qs("#accountId").value.trim(),
+        name: qs("#accountName").value.trim(),
+        role: qs("#accountRole").value,
+        password,
+      }),
+    });
+    qs("#userAccountDialog").close();
+    await renderManagedUsers();
+    setUsersTableMessage("계정을 생성했습니다.");
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+async function resetManagedUserPassword(event) {
+  event.preventDefault();
+  const accountId = qs("#passwordResetTarget").value;
+  const password = qs("#newAccountPassword").value;
+  const passwordConfirm = qs("#newAccountPasswordConfirm").value;
+  const message = qs("#passwordResetMessage");
+  if (password !== passwordConfirm) {
+    message.textContent = "비밀번호 확인이 일치하지 않습니다.";
+    return;
+  }
+  const submitButton = event.currentTarget.querySelector("button[type='submit']");
+  submitButton.disabled = true;
+  message.textContent = "비밀번호를 저장하는 중입니다.";
+  try {
+    await adminUsersRequest(`/${encodeURIComponent(accountId)}/password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+    qs("#passwordResetDialog").close();
+    await renderManagedUsers();
+    setUsersTableMessage(`${accountId} 계정의 비밀번호를 재설정했습니다.`);
+  } catch (error) {
+    message.textContent = error.message;
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+async function handleManagedUserAction(action, accountId) {
+  const account = managedUsers.find((candidate) => candidate.id === accountId);
+  if (!account || account.rootAccount) return;
+  if (action === "password") {
+    openPasswordResetDialog(accountId);
+    return;
+  }
+  if (action === "toggle") {
+    const nextDisabled = !account.disabled;
+    if (!confirm(`${accountId} 계정을 ${nextDisabled ? "잠글까요?" : "다시 사용할 수 있게 할까요?"}`)) return;
+    try {
+      await adminUsersRequest(`/${encodeURIComponent(accountId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ disabled: nextDisabled }),
+      });
+      await renderManagedUsers();
+      setUsersTableMessage(`${accountId} 계정을 ${nextDisabled ? "잠갔습니다." : "활성화했습니다."}`);
+    } catch (error) {
+      setUsersTableMessage(error.message, true);
+    }
+    return;
+  }
+  if (action === "delete") {
+    if (!confirm(`${accountId} 계정을 삭제할까요? 이 계정은 즉시 로그인할 수 없게 됩니다.`)) return;
+    try {
+      await adminUsersRequest(`/${encodeURIComponent(accountId)}`, { method: "DELETE" });
+      await renderManagedUsers();
+      setUsersTableMessage(`${accountId} 계정을 삭제했습니다.`);
+    } catch (error) {
+      setUsersTableMessage(error.message, true);
+    }
+  }
 }
 
 function filteredAdminRecords() {
@@ -4637,6 +5525,22 @@ function filteredAdminRecords() {
       if (!query) return true;
       return recordColumns.some((key) => normalize(record[key]).includes(query));
     });
+}
+
+function renderDataAdminTable() {
+  const records = filteredAdminRecords();
+  const hasQuery = Boolean(normalize(qs("#dataSearch")?.value || ""));
+  const limit = hasQuery ? ADMIN_RECORD_SEARCH_LIMIT : ADMIN_RECORD_INITIAL_LIMIT;
+  const visibleRecords = records.slice(0, limit);
+  renderEditableTable("dataTable", recordColumns, visibleRecords, saveRecords);
+
+  const message = qs("#dataTableMessage");
+  if (!message) return;
+  if (records.length > visibleRecords.length) {
+    message.textContent = `${records.length.toLocaleString("ko-KR")}건 중 ${visibleRecords.length.toLocaleString("ko-KR")}건만 표시합니다. 나머지 항목은 위 검색창에서 찾을 수 있습니다.`;
+  } else {
+    message.textContent = `${records.length.toLocaleString("ko-KR")}건을 표시합니다.`;
+  }
 }
 
 function clearUsersDatabase() {
@@ -4658,7 +5562,7 @@ function clearFloorPlansDatabase() {
 }
 
 async function clearB2CDatabase() {
-  if (!confirm("등록된 B2C 전용선 DB와 직선도를 모두 삭제할까요?")) return;
+  if (!confirm("등록된 선번장(직선도) DB와 직선도를 모두 삭제할까요?")) return;
   saveB2CLines([]);
   localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
   try {
@@ -4881,22 +5785,35 @@ function bindEvents() {
   qs("#b2cSearchBtn").addEventListener("click", searchB2CLines);
   qs("#cellSearch").addEventListener("keydown", (event) => event.key === "Enter" && searchRecords());
   qs("#b2cSearch").addEventListener("keydown", (event) => event.key === "Enter" && searchB2CLines());
-  qs("#dataSearch")?.addEventListener("input", () => renderEditableTable("dataTable", recordColumns, filteredAdminRecords(), saveRecords));
-  qs("#addUserBtn").addEventListener("click", () => addRow("users"));
+  qs("#dataSearch")?.addEventListener("input", () => {
+    window.clearTimeout(adminDataSearchTimer);
+    adminDataSearchTimer = window.setTimeout(renderDataAdminTable, 120);
+  });
+  qs("#addUserBtn").addEventListener("click", openUserAccountDialog);
   qs("#addDataBtn").addEventListener("click", () => addRow("records"));
-  qs("#exportUsersBtn").addEventListener("click", () => exportExcel("users"));
   qs("#exportDataBtn").addEventListener("click", () => exportExcel("records"));
-  qs("#clearUsersBtn").addEventListener("click", clearUsersDatabase);
   qs("#clearDataBtn").addEventListener("click", clearDataDatabase);
   qs("#clearFloorPlansBtn").addEventListener("click", clearFloorPlansDatabase);
   qs("#clearB2CBtn").addEventListener("click", clearB2CDatabase);
-  qs("#usersFile").addEventListener("change", (event) => importExcel(event, "users"));
   qs("#dataFile").addEventListener("change", (event) => importExcel(event, "records"));
+  qs("#floorPlanFile").addEventListener("change", prepareFloorPlanImageUpload);
+  qs("#floorPlanCoordinateStage").addEventListener("click", setFloorPlanCoordinate);
+  qs("#clearFloorPlanCoordinatesBtn").addEventListener("click", () => {
+    if (!pendingFloorPlanUpload) return;
+    pendingFloorPlanUpload.rackCoordinates = {};
+    renderFloorPlanCoordinateEditor();
+    qs("#floorPlanMessage").textContent = "노드명·랙 좌표를 모두 지웠습니다. 필요한 검색 좌표를 다시 지정해주세요.";
+  });
   qs("#saveFloorPlanBtn").addEventListener("click", saveFloorPlan);
+  qs("#cancelFloorPlanEditBtn")?.addEventListener("click", cancelFloorPlanEdit);
   qs("#saveB2CBtn").addEventListener("click", saveB2CFile);
   qs("#publishSharedDbBtn")?.addEventListener("click", publishSharedDatabaseToGitHub);
   qs("#downloadSharedDbBtn")?.addEventListener("click", downloadSharedDatabase);
   qs("#refreshSharedDbBtn")?.addEventListener("click", refreshSharedDatabaseFromSite);
+  qs("#userAccountForm").addEventListener("submit", createManagedUser);
+  qs("#passwordResetForm").addEventListener("submit", resetManagedUserPassword);
+  qs("#closeUserAccountDialogBtn").addEventListener("click", () => qs("#userAccountDialog").close());
+  qs("#closePasswordResetDialogBtn").addEventListener("click", () => qs("#passwordResetDialog").close());
 }
 
 async function initApp() {
@@ -4904,7 +5821,27 @@ async function initApp() {
   ensureSeedData();
   bindEvents();
   installMobileBackHandler();
+
+  authenticatedUser = await restoreSession();
+  const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
+  if (authenticatedUser?.role === "admin") {
+    if (!requestedAdmin) window.history.replaceState(null, "", "/admin");
+    showView("adminView");
+    window.requestAnimationFrame(() => renderAdmin());
+    return;
+  }
+
+  if (authenticatedUser?.role === "user") {
+    if (requestedAdmin || window.location.pathname !== "/") window.history.replaceState(null, "", "/");
+    showSearchScreen();
+    return;
+  }
+
   showView("loginView");
+  const authReason = new URLSearchParams(window.location.search).get("auth");
+  if (requestedAdmin || authReason === "admin-required") {
+    qs("#loginMessage").textContent = "관리자 페이지에 접근하려면 관리자 로그인이 필요합니다.";
+  }
 }
 
 initApp();
