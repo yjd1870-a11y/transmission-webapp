@@ -6,6 +6,7 @@
   "description": "현장 스마트폰용 CATV 전송망 통합 조회 웹사이트",
   "scripts": {
     "start": "node server.mjs",
+    "build:vercel": "node tools/build-vercel-static.mjs",
     "check": "node --check app.js && node --check server.mjs",
     "test": "node tests/auth-middleware.test.mjs",
     "security:secrets": "node tools/check-secrets.mjs --history"

@@ -15,8 +15,11 @@ const lineDiagramCacheVersion = "excel-picture-v7-mapyeong-colored-text";
 const lineDiagramCacheDir = join(root, ".cache", "line-diagram-images");
 const lineDiagramJobs = new Map();
 const authSessions = new Map();
+const loginAttempts = new Map();
 const authSessionCookie = "ratis_session";
 const authSessionLifetimeMs = 8 * 60 * 60 * 1000;
+const loginAttemptWindowMs = 15 * 60 * 1000;
+const loginAttemptLimit = 8;
 const authDatabasePath = process.env.RATIS_AUTH_DB_PATH
   ? resolve(process.env.RATIS_AUTH_DB_PATH)
   : join(root, "data", "auth-users.json");
@@ -32,6 +35,32 @@ const types = {
   ".png": "image/png",
   ".pdf": "application/pdf",
 };
+
+function applySecurityHeaders(request, response) {
+  response.setHeader("content-security-policy", [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "connect-src 'self' https://api.github.com",
+    "font-src 'self' data:",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "img-src 'self' data: blob: https:",
+    "object-src 'none'",
+    "script-src 'self' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline'",
+    "worker-src 'self' blob:",
+  ].join("; "));
+  response.setHeader("cross-origin-opener-policy", "same-origin");
+  response.setHeader("cross-origin-resource-policy", "same-origin");
+  response.setHeader("permissions-policy", "camera=(), geolocation=(), microphone=()");
+  response.setHeader("referrer-policy", "no-referrer");
+  response.setHeader("x-content-type-options", "nosniff");
+  response.setHeader("x-frame-options", "DENY");
+  const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  if (process.env.NODE_ENV === "production" || forwardedProtocol === "https") {
+    response.setHeader("strict-transport-security", "max-age=31536000; includeSubDomains");
+  }
+}
 
 function sendJson(response, statusCode, payload, headers = {}) {
   response.writeHead(statusCode, {
@@ -90,9 +119,62 @@ function requireAdmin(request, response) {
   return null;
 }
 
-function authCookie(token, maxAgeSeconds = Math.floor(authSessionLifetimeMs / 1000)) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+function requireSession(request, response) {
+  const active = activeSession(request);
+  if (active) return active;
+  sendJson(response, 401, { error: "인증이 필요합니다." });
+  return null;
+}
+
+function authCookie(request, token, maxAgeSeconds = Math.floor(authSessionLifetimeMs / 1000)) {
+  const forwardedProtocol = String(request.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const secure = process.env.NODE_ENV === "production" || forwardedProtocol === "https" ? "; Secure" : "";
   return `${authSessionCookie}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}${secure}`;
+}
+
+function loginAttemptKey(request, accountId) {
+  const remoteAddress = String(request.socket.remoteAddress || "unknown");
+  const forwardedAddress = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  return `${remoteAddress}|${forwardedAddress}|${String(accountId || "").toLowerCase()}`;
+}
+
+function activeLoginAttempt(request, accountId) {
+  const now = Date.now();
+  const key = loginAttemptKey(request, accountId);
+  const attempt = loginAttempts.get(key);
+  if (!attempt || attempt.expiresAt <= now) {
+    loginAttempts.delete(key);
+    return { key, count: 0, expiresAt: now + loginAttemptWindowMs };
+  }
+  return { key, ...attempt };
+}
+
+function recordFailedLogin(request, accountId) {
+  const attempt = activeLoginAttempt(request, accountId);
+  if (loginAttempts.size >= 10_000) {
+    const now = Date.now();
+    for (const [key, entry] of loginAttempts) {
+      if (entry.expiresAt <= now) loginAttempts.delete(key);
+    }
+    if (loginAttempts.size >= 10_000) {
+      const oldestKey = loginAttempts.keys().next().value;
+      if (oldestKey) loginAttempts.delete(oldestKey);
+    }
+  }
+  loginAttempts.set(attempt.key, { count: attempt.count + 1, expiresAt: attempt.expiresAt });
+}
+
+function clearFailedLogins(request, accountId) {
+  loginAttempts.delete(loginAttemptKey(request, accountId));
+}
+
+function rejectCrossSiteMutation(request, response) {
+  const fetchSite = String(request.headers["sec-fetch-site"] || "").toLowerCase();
+  if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
+    sendJson(response, 403, { error: "교차 사이트 요청은 허용되지 않습니다." });
+    return true;
+  }
+  return false;
 }
 
 function normalizeStoredAccount(account) {
@@ -198,6 +280,14 @@ async function handleLogin(request, response) {
     const body = await collectRequestBody(request, 16 * 1024);
     const credentials = JSON.parse(body.toString("utf8") || "{}");
     const requestedId = String(credentials.id || "").trim();
+    const loginAttempt = activeLoginAttempt(request, requestedId);
+    if (loginAttempt.count >= loginAttemptLimit) {
+      const retryAfter = Math.max(1, Math.ceil((loginAttempt.expiresAt - Date.now()) / 1000));
+      sendJson(response, 429, { error: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요." }, {
+        "retry-after": String(retryAfter),
+      });
+      return;
+    }
     let authenticatedAccount = null;
 
     if (requestedId === "admin") {
@@ -215,10 +305,12 @@ async function handleLogin(request, response) {
     }
 
     if (!authenticatedAccount) {
+      recordFailedLogin(request, requestedId);
       sendJson(response, 401, { error: "아이디 또는 비밀번호를 확인해주세요." });
       return;
     }
 
+    clearFailedLogins(request, requestedId);
     const token = randomBytes(32).toString("hex");
     authSessions.set(token, {
       id: String(authenticatedAccount.id),
@@ -233,7 +325,7 @@ async function handleLogin(request, response) {
         name: authenticatedAccount.name || authenticatedAccount.id,
         role: authenticatedAccount.role === "admin" ? "admin" : "user",
       },
-    }, { "set-cookie": authCookie(token) });
+    }, { "set-cookie": authCookie(request, token) });
   } catch (error) {
     sendJson(response, 400, { error: "로그인 요청 형식을 확인해주세요." });
   }
@@ -252,7 +344,7 @@ function handleSession(request, response) {
 function handleLogout(request, response) {
   const active = activeSession(request);
   if (active) authSessions.delete(active.token);
-  sendJson(response, 200, { authenticated: false }, { "set-cookie": authCookie("", 0) });
+  sendJson(response, 200, { authenticated: false }, { "set-cookie": authCookie(request, "", 0) });
 }
 
 async function handleListUsers(response) {
@@ -511,8 +603,12 @@ async function handleLineDiagramImages(request, response) {
   }
 }
 
-const server = createServer(async (request, response) => {
+async function handleRequest(request, response) {
+  applySecurityHeaders(request, response);
   const url = new URL(request.url || "/", `http://${host}:${port}`);
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method || "") && rejectCrossSiteMutation(request, response)) {
+    return;
+  }
   if (request.method === "POST" && url.pathname === "/api/auth/login") {
     await handleLogin(request, response);
     return;
@@ -561,6 +657,7 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "GET" && url.pathname === "/assets/shared-db.json") {
+    if (!requireSession(request, response)) return;
     await handlePublicSharedDatabase(response);
     return;
   }
@@ -581,7 +678,14 @@ const server = createServer(async (request, response) => {
     return;
   }
 
-  const pathname = decodeURIComponent((url.pathname === "/" || isAdminPage) ? "/index.html" : url.pathname);
+  let pathname = "";
+  try {
+    pathname = decodeURIComponent((url.pathname === "/" || isAdminPage) ? "/index.html" : url.pathname);
+  } catch {
+    sendJson(response, 400, { error: "잘못된 요청 경로입니다." });
+    return;
+  }
+  if (pathname.startsWith("/assets/") && !requireSession(request, response)) return;
   if (!isPublicStaticPath(pathname)) {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     response.end("Not found");
@@ -600,6 +704,14 @@ const server = createServer(async (request, response) => {
     ...(isAdminPage ? { "cache-control": "no-store" } : {}),
   });
   createReadStream(filePath).pipe(response);
+}
+
+const server = createServer((request, response) => {
+  handleRequest(request, response).catch((error) => {
+    console.error("Request handling failed:", error);
+    if (!response.headersSent) sendJson(response, 500, { error: "서버 요청 처리에 실패했습니다." });
+    else response.end();
+  });
 });
 
 // Excel 그림 변환은 큰 통합 문서에서 몇 분 걸릴 수 있습니다.

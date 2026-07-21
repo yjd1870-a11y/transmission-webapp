@@ -44,6 +44,17 @@ function Get-ShapeRgbParts {
   }
 }
 
+function Get-ShapeTextFontRgb {
+  param($Shape)
+  try {
+    return [int64]$Shape.TextFrame2.TextRange.Font.Fill.ForeColor.RGB
+  } catch {}
+  try {
+    return [int64]$Shape.TextFrame.Characters().Font.Color
+  } catch {}
+  return $null
+}
+
 function Test-SearchNavyFill {
   param($Shape)
   $parts = Get-ShapeRgbParts $Shape
@@ -125,6 +136,8 @@ function Add-TextShapeEntry {
     if (-not $text) { return }
     [void]$Entries.Add([pscustomobject]@{
       text = $text
+      navy = Test-SearchNavyFill $Shape
+      fontRgb = Get-ShapeTextFontRgb $Shape
       left = [double]$Shape.Left
       top = [double]$Shape.Top
       width = [double]$Shape.Width
@@ -144,8 +157,54 @@ function Test-TextCenterInsideShape {
     -and $centerY -le ($ShapeEntry.top + $ShapeEntry.height + $tolerance)
 }
 
+function Test-MapyeongExternalSearchText {
+  param([string]$Text)
+  $value = ([string]$Text).Trim()
+  if (-not $value) { return $false }
+  $compact = $value -replace '[^\p{L}\p{N}#]', ''
+  if ($compact.Length -lt 6) { return $false }
+  $distanceToken = -join ([char]0xAC70, [char]0xB9AC)
+  $specToken = -join ([char]0xADDC, [char]0xACA9)
+  $codeToken = -join ([char]0xCF54, [char]0xB4DC)
+  $manholeToken = -join ([char]0xB9E8, [char]0xD640)
+  $poleToken = -join ([char]0xC804, [char]0xC8FC)
+  $cellNameToken = -join ([char]0xC140, [char]0xBA85)
+  $lineNumberToken = -join ([char]0xC120, [char]0xBC88)
+  $dedicatedToken = -join ([char]0xC804, [char]0xC6A9)
+  $excludedPrefixPattern = '^\s*(' + [regex]::Escape($distanceToken) + '|' + [regex]::Escape($specToken) + '|' + [regex]::Escape($codeToken) + '|' + [regex]::Escape($manholeToken) + '|' + [regex]::Escape($poleToken) + ')\s*:'
+  if ($value -match $excludedPrefixPattern) { return $false }
+  if ($compact -match '^[0-9]+$') { return $false }
+  $servicePattern = '(' + [regex]::Escape($cellNameToken) + '|' + [regex]::Escape($lineNumberToken) + '|' + [regex]::Escape($dedicatedToken) + '|B2C|#)'
+  $hangulStart = [char]0xAC00
+  $hangulEnd = [char]0xD7A3
+  $hangulPattern = '[' + $hangulStart + '-' + $hangulEnd + ']{4,}'
+  return $value -match $servicePattern -or $compact -match $hangulPattern
+}
+
+function Test-MapyeongSearchTextShape {
+  param($TextEntry)
+  if (-not (Test-MapyeongExternalSearchText $TextEntry.text)) { return $false }
+  $fontRgb = $TextEntry.fontRgb
+  $blackRgb = [int64]0
+  $purpleRgb = [int64]10498160
+  $mixedRgb = [int64]-2147483648
+  $cellNameToken = -join ([char]0xC140, [char]0xBA85)
+  $cellPattern = '(' + [regex]::Escape($cellNameToken) + '|#G[0-9A-Z]{4,})'
+
+  # Mapyeong CELL labels are black. Limit black text to explicit cell labels/codes
+  # so ordinary pole numbers and infrastructure annotations are not indexed.
+  if ($fontRgb -eq $blackRgb) {
+    return ([string]$TextEntry.text) -match $cellPattern
+  }
+
+  # Mapyeong B2C labels use Excel purple (#7030A0). Some labels include a red
+  # line-number run, which Excel reports as the mixed-color sentinel.
+  return $fontRgb -eq $purpleRgb -or $fontRgb -eq $mixedRgb
+}
+
 function Get-ClipboardImageWithRetry {
-  for ($attempt = 0; $attempt -lt 20; $attempt += 1) {
+  param([int]$Attempts = 80)
+  for ($attempt = 0; $attempt -lt $Attempts; $attempt += 1) {
     try {
       $image = [System.Windows.Forms.Clipboard]::GetImage()
       if ($image -ne $null) { return $image }
@@ -157,6 +216,25 @@ function Get-ClipboardImageWithRetry {
   return $null
 }
 
+function Copy-SheetPictureWithRetry {
+  param(
+    $Sheet,
+    $Excel
+  )
+  for ($copyAttempt = 0; $copyAttempt -lt 4; $copyAttempt += 1) {
+    try {
+      $Sheet.Activate() | Out-Null
+      [System.Windows.Forms.Clipboard]::Clear() | Out-Null
+      $Sheet.Shapes.SelectAll() | Out-Null
+      $Excel.Selection.CopyPicture(1, 2) | Out-Null
+      $image = Get-ClipboardImageWithRetry -Attempts 80
+      if ($image -ne $null) { return $image }
+    } catch {}
+    Start-Sleep -Milliseconds 700
+  }
+  return $null
+}
+
 try {
   $excel = New-Object -ComObject Excel.Application
   $excel.Visible = $false
@@ -164,6 +242,15 @@ try {
   $excel.ScreenUpdating = $false
 
   $workbook = $excel.Workbooks.Open($InputPath, 0, $true)
+  $isMapyeongWorkbook = $false
+  $mapyeongToken = -join ([char]0xB9C8, [char]0xD3C9)
+  foreach ($workbookSheet in $workbook.Worksheets) {
+    $workbookSheetName = [string]($workbookSheet.Name)
+    if ($workbookSheetName.Contains($mapyeongToken)) {
+      $isMapyeongWorkbook = $true
+      break
+    }
+  }
   $index = 0
 
   foreach ($sheet in $workbook.Worksheets) {
@@ -200,7 +287,7 @@ try {
       Add-NavyShapeEntry -Shape $shape -Entries $navyEntries
     }
     $textEntries = @()
-    if (@($navyEntries | Where-Object { -not $_.text }).Count -gt 0) {
+    if ($isMapyeongWorkbook -or @($navyEntries | Where-Object { -not $_.text }).Count -gt 0) {
       $allTextEntries = New-Object System.Collections.ArrayList
       foreach ($shape in $sheet.Shapes) {
         Add-TextShapeEntry -Shape $shape -Entries $allTextEntries
@@ -235,13 +322,27 @@ try {
         height = (($visibleBottom - $visibleTop) / $boundsHeight) * 100
       }
     }
+    if ($isMapyeongWorkbook) {
+      foreach ($textEntry in $textEntries) {
+        if ($textEntry.navy -or -not (Test-MapyeongSearchTextShape $textEntry)) { continue }
+        $visibleLeft = [Math]::Max($exportLeft, [double]$textEntry.left)
+        $visibleTop = [Math]::Max($exportTop, [double]$textEntry.top)
+        $visibleRight = [Math]::Min($maxRight, [double]$textEntry.left + [double]$textEntry.width)
+        $visibleBottom = [Math]::Min($maxBottom, [double]$textEntry.top + [double]$textEntry.height)
+        if ($visibleRight -le $visibleLeft -or $visibleBottom -le $visibleTop) { continue }
+        $searchTargets += [pscustomobject]@{
+          text = $textEntry.text
+          label = $textEntry.text
+          left = (($visibleLeft - $exportLeft) / $boundsWidth) * 100
+          top = (($visibleTop - $exportTop) / $boundsHeight) * 100
+          width = (($visibleRight - $visibleLeft) / $boundsWidth) * 100
+          height = (($visibleBottom - $visibleTop) / $boundsHeight) * 100
+          source = "mapyeong-external-text"
+        }
+      }
+    }
 
-    $sheet.Activate() | Out-Null
-    [System.Windows.Forms.Clipboard]::Clear() | Out-Null
-    $sheet.Shapes.SelectAll() | Out-Null
-    $excel.Selection.CopyPicture(1, 2) | Out-Null
-
-    $image = Get-ClipboardImageWithRetry
+    $image = Copy-SheetPictureWithRetry -Sheet $sheet -Excel $excel
     if ($image -eq $null) {
       throw "Excel did not place an image on the clipboard for sheet '$sheetName'."
     }

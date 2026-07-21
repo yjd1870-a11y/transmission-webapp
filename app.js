@@ -268,7 +268,10 @@ async function loadPresetLineDiagramManifest(config) {
   const embeddedManifest = window.__LINE_DIAGRAM_MANIFESTS__?.[config.manifestKey];
   if (embeddedManifest) return embeddedManifest;
   if (!presetLineDiagramManifestCache.has(config.manifestUrl)) {
-    presetLineDiagramManifestCache.set(config.manifestUrl, fetch(config.manifestUrl, { cache: "no-store" }).then((response) => {
+    presetLineDiagramManifestCache.set(config.manifestUrl, fetch(config.manifestUrl, {
+      cache: "no-store",
+      credentials: "same-origin",
+    }).then((response) => {
       if (!response.ok) throw new Error(`직선도 원본 이미지 목록을 불러오지 못했습니다 (${response.status}).`);
       return response.json();
     }));
@@ -502,7 +505,7 @@ async function loadSharedDatabaseFromSite({ force = false } = {}) {
   const url = new URL(SHARED_DB_PATH, window.location.href);
   url.searchParams.set("v", force ? String(Date.now()) : APP_VERSION);
   try {
-    const response = await fetch(url.href, { cache: "no-store" });
+    const response = await fetch(url.href, { cache: "no-store", credentials: "same-origin" });
     if (!response.ok) return false;
     const db = await response.json();
     const version = sharedDbVersionOf(db);
@@ -731,6 +734,8 @@ async function login(event) {
     const { response, result } = await requestLogin(id, password);
     if (response.ok && result?.authenticated && ["user", "admin"].includes(result?.user?.role)) {
       authenticatedUser = result.user;
+      const sharedDatabaseLoaded = await loadSharedDatabaseFromSite();
+      if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
       message.textContent = "";
       qs("#loginForm").reset();
       if (authenticatedUser.role === "admin") {
@@ -5823,12 +5828,14 @@ function bindEvents() {
 }
 
 async function initApp() {
-  await loadSharedDatabaseFromSite();
-  ensureSeedData();
   bindEvents();
   installMobileBackHandler();
 
   authenticatedUser = await restoreSession();
+  if (authenticatedUser) {
+    const sharedDatabaseLoaded = await loadSharedDatabaseFromSite();
+    if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
+  }
   const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
   if (authenticatedUser?.role === "admin") {
     if (!requestedAdmin) window.history.replaceState(null, "", "/admin");
