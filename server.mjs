@@ -4,13 +4,34 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import {
+  bootstrapNeon,
+  createPendingPhoto,
+  getPhoto,
+  listPhotos,
+  neonConfigured,
+  readNeonAuthAccounts,
+  readNeonSharedDatabase,
+  readyPhoto,
+  removePhoto,
+  writeNeonAuthAccounts,
+  writeNeonSharedDatabase,
+} from "./lib/neon-store.mjs";
+import {
+  deletePhotoObject,
+  inspectPhotoObject,
+  r2Configured,
+  r2ConfigurationComplete,
+  signedPhotoDownloadUrl,
+  signedPhotoUploadUrl,
+} from "./lib/r2-photo-store.mjs";
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 8000);
 const host = process.env.HOST || "127.0.0.1";
-const apiVersion = "managed-auth-v1";
+const apiVersion = "neon-r2-v2";
 const lineDiagramCacheVersion = "excel-picture-v7-mapyeong-colored-text";
 const lineDiagramCacheDir = join(root, ".cache", "line-diagram-images");
 const lineDiagramJobs = new Map();
@@ -23,8 +44,15 @@ const loginAttemptLimit = 8;
 const authDatabasePath = process.env.RATIS_AUTH_DB_PATH
   ? resolve(process.env.RATIS_AUTH_DB_PATH)
   : join(root, "data", "auth-users.json");
+const sharedDatabasePath = process.env.RATIS_SHARED_DB_PATH
+  ? resolve(process.env.RATIS_SHARED_DB_PATH)
+  : join(root, "assets", "shared-db.json");
 const scryptAsync = promisify(scryptCallback);
 let authDatabaseWriteQueue = Promise.resolve();
+let persistentStorageBootstrapPromise;
+
+const photoSizeLimitBytes = 10 * 1024 * 1024;
+const photoContentTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 const types = {
   ".html": "text/html; charset=utf-8",
@@ -40,7 +68,7 @@ function applySecurityHeaders(request, response) {
   response.setHeader("content-security-policy", [
     "default-src 'self'",
     "base-uri 'self'",
-    "connect-src 'self' https://api.github.com",
+    "connect-src 'self' https://api.github.com https://*.r2.cloudflarestorage.com",
     "font-src 'self' data:",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -189,7 +217,7 @@ function normalizeStoredAccount(account) {
   };
 }
 
-async function readAuthAccounts() {
+async function readFileAuthAccounts() {
   try {
     const parsed = JSON.parse(await readFile(authDatabasePath, "utf8"));
     return (Array.isArray(parsed?.users) ? parsed.users : []).map(normalizeStoredAccount);
@@ -199,17 +227,61 @@ async function readAuthAccounts() {
     const initialUsers = (Array.isArray(sharedDatabase?.users) ? sharedDatabase.users : [])
       .filter((user) => user?.role !== "admin" && String(user?.id || "").trim() !== "admin")
       .map((user) => normalizeStoredAccount(user));
-    await writeAuthAccounts(initialUsers);
+    await writeFileAuthAccounts(initialUsers);
     return initialUsers;
   }
 }
 
-async function writeAuthAccounts(users) {
+async function writeFileAuthAccounts(users) {
   await mkdir(dirname(authDatabasePath), { recursive: true });
   await writeFile(authDatabasePath, `${JSON.stringify({ version: 1, users }, null, 2)}\n`, {
     encoding: "utf8",
     mode: 0o600,
   });
+}
+
+async function initializePersistentStorage() {
+  if (!neonConfigured()) return;
+  if (!persistentStorageBootstrapPromise) {
+    persistentStorageBootstrapPromise = Promise.all([
+      readFileAuthAccounts(),
+      readFile(sharedDatabasePath, "utf8").then(JSON.parse).catch((error) => {
+        if (error?.code === "ENOENT") return null;
+        throw error;
+      }),
+    ]).then(([authUsers, sharedDatabase]) => bootstrapNeon({ authUsers, sharedDatabase }));
+  }
+  return persistentStorageBootstrapPromise;
+}
+
+async function readAuthAccounts() {
+  if (!neonConfigured()) return readFileAuthAccounts();
+  await initializePersistentStorage();
+  return readNeonAuthAccounts();
+}
+
+async function writeAuthAccounts(users) {
+  if (!neonConfigured()) return writeFileAuthAccounts(users);
+  await initializePersistentStorage();
+  return writeNeonAuthAccounts(users);
+}
+
+async function readSharedDatabase() {
+  if (!neonConfigured()) return JSON.parse(await readFile(sharedDatabasePath, "utf8"));
+  await initializePersistentStorage();
+  const sharedDatabase = await readNeonSharedDatabase();
+  if (!sharedDatabase) throw new Error("Neon 공용 데이터가 초기화되지 않았습니다.");
+  return sharedDatabase;
+}
+
+async function writeSharedDatabase(sharedDatabase) {
+  if (!neonConfigured()) {
+    await mkdir(dirname(sharedDatabasePath), { recursive: true });
+    await writeFile(sharedDatabasePath, `${JSON.stringify(sharedDatabase, null, 2)}\n`, "utf8");
+    return;
+  }
+  await initializePersistentStorage();
+  await writeNeonSharedDatabase(sharedDatabase);
 }
 
 function mutateAuthAccounts(mutator) {
@@ -451,18 +523,230 @@ async function handleDeleteUser(response, id) {
 
 async function handlePublicSharedDatabase(response) {
   try {
-    const sharedDatabase = JSON.parse(await readFile(join(root, "assets", "shared-db.json"), "utf8"));
-    const publicDatabase = {
-      ...sharedDatabase,
-      users: Array.isArray(sharedDatabase?.users)
-        ? sharedDatabase.users
-          .filter((user) => user?.role !== "admin")
-          .map(({ password: _password, ...user }) => user)
-        : [],
-    };
+    const sharedDatabase = await readSharedDatabase();
+    const { users: _legacyUsers, ...publicDatabase } = sharedDatabase;
     sendJson(response, 200, publicDatabase);
   } catch (error) {
     sendJson(response, 500, { error: "공용 DB를 불러오지 못했습니다." });
+  }
+}
+
+async function handleSaveSharedDatabase(request, response) {
+  try {
+    const payload = JSON.parse((await collectRequestBody(request, 64 * 1024 * 1024)).toString("utf8") || "{}");
+    const databaseKeys = ["records", "floorPlans", "b2cLines", "b2cDiagrams"];
+    if (!databaseKeys.every((key) => Array.isArray(payload[key]))) {
+      sendJson(response, 400, { error: "데이터·평면도·B2C·직선도 DB 형식을 확인해주세요." });
+      return;
+    }
+    const updatedAt = new Date().toISOString();
+    const sharedDatabase = {
+      schemaVersion: 1,
+      version: updatedAt,
+      appVersion: String(payload.appVersion || ""),
+      updatedAt,
+      records: payload.records,
+      floorPlans: payload.floorPlans,
+      b2cLines: payload.b2cLines,
+      b2cDiagrams: payload.b2cDiagrams,
+    };
+    await writeSharedDatabase(sharedDatabase);
+    sendJson(response, 200, {
+      saved: true,
+      version: updatedAt,
+      storage: neonConfigured() ? "neon" : "file",
+      counts: Object.fromEntries(databaseKeys.map((key) => [key, sharedDatabase[key].length])),
+    });
+  } catch (error) {
+    console.error("Shared database save failed:", error);
+    sendJson(response, 400, { error: "공용 DB를 저장하지 못했습니다." });
+  }
+}
+
+function photoStorageAvailable(response) {
+  if (!neonConfigured() || !r2Configured()) {
+    sendJson(response, 503, {
+      code: "PHOTO_STORAGE_DISABLED",
+      error: "Neon 또는 R2 사진 저장소가 아직 설정되지 않았습니다.",
+    });
+    return false;
+  }
+  return true;
+}
+
+function validatePhotoType(value) {
+  const type = String(value || "").toLowerCase();
+  if (!['onu', 'ups'].includes(type)) throw new Error("사진 종류가 올바르지 않습니다.");
+  return type;
+}
+
+function validatePhotoRecordKey(value) {
+  const recordKey = String(value || "").trim();
+  if (!recordKey || recordKey.length > 200) throw new Error("사진 대상 CELL 정보를 확인해주세요.");
+  return recordKey;
+}
+
+function validatePhotoId(value) {
+  const id = String(value || "").toLowerCase();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id)) {
+    throw new Error("사진 식별자가 올바르지 않습니다.");
+  }
+  return id;
+}
+
+function photoUrl(photoId) {
+  return `/api/photos/${encodeURIComponent(photoId)}/content`;
+}
+
+function photoExtension(contentType) {
+  return {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+    "image/gif": "gif",
+  }[contentType] || "bin";
+}
+
+async function handleListPhotos(response, url) {
+  try {
+    if (!photoStorageAvailable(response)) return;
+    const recordKey = validatePhotoRecordKey(url.searchParams.get("recordKey"));
+    const type = validatePhotoType(url.searchParams.get("type"));
+    const photos = await listPhotos(recordKey, type);
+    sendJson(response, 200, {
+      photos: photos.map((photo) => ({
+        id: photo.id,
+        url: photoUrl(photo.id),
+        contentType: photo.contentType,
+        sizeBytes: photo.sizeBytes,
+        originalName: photo.originalName,
+        createdAt: photo.createdAt,
+      })),
+    });
+  } catch (error) {
+    sendJson(response, 400, { error: error.message || "사진 목록을 불러오지 못했습니다." });
+  }
+}
+
+async function handleCreatePhotoUpload(request, response, session) {
+  try {
+    if (!photoStorageAvailable(response)) return;
+    const payload = JSON.parse((await collectRequestBody(request, 32 * 1024)).toString("utf8") || "{}");
+    const recordKey = validatePhotoRecordKey(payload.recordKey);
+    const photoType = validatePhotoType(payload.type);
+    const contentType = String(payload.contentType || "").toLowerCase();
+    const sizeBytes = Number(payload.sizeBytes);
+    const originalName = String(payload.fileName || "photo").trim().slice(0, 200);
+    const replacesPhotoId = payload.replacesPhotoId ? validatePhotoId(payload.replacesPhotoId) : "";
+    if (!photoContentTypes.has(contentType)) throw new Error("JPEG, PNG, WEBP, GIF 사진만 등록할 수 있습니다.");
+    if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > photoSizeLimitBytes) {
+      throw new Error("사진은 한 장당 10MB 이하여야 합니다.");
+    }
+
+    const id = randomUUID();
+    const now = new Date();
+    const objectKey = `photos/${now.getUTCFullYear()}/${String(now.getUTCMonth() + 1).padStart(2, "0")}/${id}.${photoExtension(contentType)}`;
+    await createPendingPhoto({
+      id,
+      recordKey,
+      photoType,
+      objectKey,
+      contentType,
+      sizeBytes,
+      originalName,
+      uploadedBy: session.session.id,
+      replacesPhotoId,
+    });
+    try {
+      const upload = await signedPhotoUploadUrl({ objectKey, contentType, expiresIn: 300 });
+      sendJson(response, 201, {
+        photoId: id,
+        uploadUrl: upload.url,
+        expiresAt: upload.expiresAt,
+        contentType,
+      });
+    } catch (error) {
+      await removePhoto(id).catch(() => {});
+      throw error;
+    }
+  } catch (error) {
+    const status = ["PHOTO_LIMIT", "PHOTO_NOT_FOUND"].includes(error.code) ? 409 : 400;
+    sendJson(response, status, { code: error.code || "PHOTO_UPLOAD_ERROR", error: error.message || "사진 업로드를 준비하지 못했습니다." });
+  }
+}
+
+async function handleCompletePhoto(response, photoId) {
+  try {
+    if (!photoStorageAvailable(response)) return;
+    const id = validatePhotoId(photoId);
+    const photo = await getPhoto(id, { includePending: true });
+    if (!photo) {
+      sendJson(response, 404, { error: "사진 업로드 정보를 찾지 못했습니다." });
+      return;
+    }
+    const object = await inspectPhotoObject(photo.objectKey);
+    if (object.sizeBytes !== photo.sizeBytes || object.sizeBytes > photoSizeLimitBytes || object.contentType !== photo.contentType) {
+      await deletePhotoObject(photo.objectKey).catch(() => {});
+      await removePhoto(id).catch(() => {});
+      sendJson(response, 400, { error: "업로드된 사진의 크기 또는 형식이 요청과 일치하지 않습니다." });
+      return;
+    }
+    const completed = await readyPhoto(id);
+    if (!completed) {
+      sendJson(response, 404, { error: "사진 업로드 정보를 찾지 못했습니다." });
+      return;
+    }
+    if (completed.replacedObjectKey) {
+      await deletePhotoObject(completed.replacedObjectKey).catch((error) => {
+        console.warn("Replaced R2 photo cleanup failed:", error);
+      });
+    }
+    sendJson(response, 200, {
+      photo: {
+        id: completed.photo.id,
+        url: photoUrl(completed.photo.id),
+        contentType: completed.photo.contentType,
+        sizeBytes: completed.photo.sizeBytes,
+      },
+    });
+  } catch (error) {
+    console.error("Photo completion failed:", error);
+    sendJson(response, 400, { error: error.message || "사진 업로드를 완료하지 못했습니다." });
+  }
+}
+
+async function handlePhotoContent(response, photoId) {
+  try {
+    if (!photoStorageAvailable(response)) return;
+    const photo = await getPhoto(validatePhotoId(photoId));
+    if (!photo) {
+      sendJson(response, 404, { error: "사진을 찾지 못했습니다." });
+      return;
+    }
+    const location = await signedPhotoDownloadUrl({ objectKey: photo.objectKey, expiresIn: 600 });
+    response.writeHead(302, { location, "cache-control": "private, no-store" });
+    response.end();
+  } catch (error) {
+    console.error("Photo download failed:", error);
+    sendJson(response, 400, { error: error.message || "사진을 불러오지 못했습니다." });
+  }
+}
+
+async function handleDeletePhoto(response, photoId) {
+  try {
+    if (!photoStorageAvailable(response)) return;
+    const id = validatePhotoId(photoId);
+    const photo = await getPhoto(id, { includePending: true });
+    if (!photo) {
+      sendJson(response, 404, { error: "사진을 찾지 못했습니다." });
+      return;
+    }
+    await deletePhotoObject(photo.objectKey);
+    await removePhoto(id);
+    sendJson(response, 200, { deleted: true });
+  } catch (error) {
+    console.error("Photo delete failed:", error);
+    sendJson(response, 400, { error: error.message || "사진을 삭제하지 못했습니다." });
   }
 }
 
@@ -648,12 +932,49 @@ async function handleRequest(request, response) {
     await handleDeleteUser(response, decodeURIComponent(userMatch[1]));
     return;
   }
+  if (request.method === "GET" && url.pathname === "/api/photos") {
+    if (!requireSession(request, response)) return;
+    await handleListPhotos(response, url);
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/api/photos/upload-url") {
+    const session = requireSession(request, response);
+    if (!session) return;
+    await handleCreatePhotoUpload(request, response, session);
+    return;
+  }
+  const photoContentMatch = url.pathname.match(/^\/api\/photos\/([^/]+)\/content$/);
+  if (request.method === "GET" && photoContentMatch) {
+    if (!requireSession(request, response)) return;
+    await handlePhotoContent(response, decodeURIComponent(photoContentMatch[1]));
+    return;
+  }
+  const photoCompleteMatch = url.pathname.match(/^\/api\/photos\/([^/]+)\/complete$/);
+  if (request.method === "POST" && photoCompleteMatch) {
+    if (!requireSession(request, response)) return;
+    await handleCompletePhoto(response, decodeURIComponent(photoCompleteMatch[1]));
+    return;
+  }
+  const photoMatch = url.pathname.match(/^\/api\/photos\/([^/]+)$/);
+  if (request.method === "DELETE" && photoMatch) {
+    if (!requireSession(request, response)) return;
+    await handleDeletePhoto(response, decodeURIComponent(photoMatch[1]));
+    return;
+  }
   if (request.method === "GET" && url.pathname === "/api/health") {
     response.writeHead(200, {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
     });
-    response.end(JSON.stringify({ ok: true, apiVersion, activeLineDiagramJobs: lineDiagramJobs.size }));
+    response.end(JSON.stringify({
+      ok: true,
+      apiVersion,
+      authConfigured: Boolean(adminAccountFromEnvironment()),
+      database: neonConfigured() ? "neon" : "file",
+      photoStorage: neonConfigured() && r2Configured() ? "r2" : "disabled",
+      r2ConfigurationComplete: r2ConfigurationComplete(),
+      activeLineDiagramJobs: lineDiagramJobs.size,
+    }));
     return;
   }
   if (request.method === "GET" && url.pathname === "/assets/shared-db.json") {
@@ -664,6 +985,11 @@ async function handleRequest(request, response) {
   if (request.method === "POST" && url.pathname === "/api/line-diagram-images") {
     if (!requireAdmin(request, response)) return;
     await handleLineDiagramImages(request, response);
+    return;
+  }
+  if (request.method === "POST" && url.pathname === "/api/admin/shared-db") {
+    if (!requireAdmin(request, response)) return;
+    await handleSaveSharedDatabase(request, response);
     return;
   }
 
@@ -717,6 +1043,18 @@ const server = createServer((request, response) => {
 // Excel 그림 변환은 큰 통합 문서에서 몇 분 걸릴 수 있습니다.
 server.requestTimeout = 0;
 server.timeout = 0;
-server.listen(port, host, () => {
-  console.log(`CATV app ready at http://${host}:${port}`);
+
+async function startServer() {
+  if (!r2ConfigurationComplete()) {
+    throw new Error("R2 환경변수는 R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET을 모두 설정해야 합니다.");
+  }
+  await initializePersistentStorage();
+  server.listen(port, host, () => {
+    console.log(`CATV app ready at http://${host}:${port} (${neonConfigured() ? "Neon" : "file"}, ${r2Configured() ? "R2" : "local photos"})`);
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Server startup failed:", error);
+  process.exitCode = 1;
 });

@@ -7,9 +7,15 @@
   "scripts": {
     "start": "node server.mjs",
     "build:vercel": "node tools/build-vercel-static.mjs",
-    "check": "node --check app.js && node --check server.mjs",
+    "check": "node --check app.js && node --check server.mjs && node --check lib/neon-store.mjs && node --check lib/r2-photo-store.mjs && node --check tools/configure-r2-cors.mjs",
     "test": "node tests/auth-middleware.test.mjs",
+    "r2:configure-cors": "node tools/configure-r2-cors.mjs",
     "security:secrets": "node tools/check-secrets.mjs --history"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.850.0",
+    "@aws-sdk/s3-request-presigner": "^3.850.0",
+    "pg": "^8.16.3"
   },
   "engines": {
     "node": ">=18"

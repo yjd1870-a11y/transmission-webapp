@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -10,6 +10,8 @@ import { dirname, join } from "node:path";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const authTempDirectory = await mkdtemp(join(tmpdir(), "ratis-auth-test-"));
 const authDatabasePath = join(authTempDirectory, "auth-users.json");
+const sharedDatabasePath = join(authTempDirectory, "shared-db.json");
+await writeFile(sharedDatabasePath, await readFile(join(root, "assets", "shared-db.json")));
 
 function freePort() {
   return new Promise((resolve, reject) => {
@@ -46,6 +48,12 @@ const child = spawn(process.execPath, [join(root, "server.mjs")], {
     HOST: "127.0.0.1",
     RATIS_MASTER_KEY: testMasterKey,
     RATIS_AUTH_DB_PATH: authDatabasePath,
+    RATIS_SHARED_DB_PATH: sharedDatabasePath,
+    DATABASE_URL: "",
+    R2_ACCOUNT_ID: "",
+    R2_ACCESS_KEY_ID: "",
+    R2_SECRET_ACCESS_KEY: "",
+    R2_BUCKET: "",
   },
   windowsHide: true,
 });
@@ -57,7 +65,12 @@ try {
 
   const versionedHealth = await fetch(`${baseUrl}/api/health`);
   assert.equal(versionedHealth.status, 200);
-  assert.equal((await versionedHealth.json()).apiVersion, "managed-auth-v1");
+  const versionedHealthPayload = await versionedHealth.json();
+  assert.equal(versionedHealthPayload.apiVersion, "neon-r2-v2");
+  assert.equal(versionedHealthPayload.authConfigured, true);
+  assert.equal(versionedHealthPayload.database, "file");
+  assert.equal(versionedHealthPayload.photoStorage, "disabled");
+  assert.equal(versionedHealthPayload.r2ConfigurationComplete, true);
   assert.equal(versionedHealth.headers.get("x-content-type-options"), "nosniff");
   assert.equal(versionedHealth.headers.get("x-frame-options"), "DENY");
   assert.match(versionedHealth.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
@@ -104,15 +117,39 @@ try {
   assert.equal(authenticatedSession.status, 200);
   assert.equal((await authenticatedSession.json()).user.role, "admin");
 
+  const disabledPhotoStorage = await fetch(`${baseUrl}/api/photos/upload-url`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({ recordKey: "TEST", type: "onu", contentType: "image/jpeg", sizeBytes: 100 }),
+  });
+  assert.equal(disabledPhotoStorage.status, 503);
+  assert.equal((await disabledPhotoStorage.json()).code, "PHOTO_STORAGE_DISABLED");
+
   const authenticatedAdmin = await fetch(`${baseUrl}/admin`, { headers: { cookie }, redirect: "manual" });
   assert.equal(authenticatedAdmin.status, 200);
   assert.match(await authenticatedAdmin.text(), /id="adminView"/);
 
   const authenticatedDatabase = await fetch(`${baseUrl}/assets/shared-db.json`, { headers: { cookie } });
   assert.equal(authenticatedDatabase.status, 200);
-  const authenticatedUsers = (await authenticatedDatabase.json()).users;
-  assert.ok(authenticatedUsers.every((user) => user.role !== "admin"));
-  assert.ok(authenticatedUsers.every((user) => !("password" in user)));
+  const authenticatedDatabasePayload = await authenticatedDatabase.json();
+  assert.ok(!("users" in authenticatedDatabasePayload));
+  assert.ok(Array.isArray(authenticatedDatabasePayload.records));
+
+  const savedSharedDatabase = await fetch(`${baseUrl}/api/admin/shared-db`, {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify({
+      users: [{ id: "must-not-be-saved", role: "admin" }],
+      records: [{ cellName: "테스트 셀" }],
+      floorPlans: [],
+      b2cLines: [],
+      b2cDiagrams: [],
+    }),
+  });
+  assert.equal(savedSharedDatabase.status, 200);
+  const savedSharedDatabaseFile = JSON.parse(await readFile(sharedDatabasePath, "utf8"));
+  assert.ok(!("users" in savedSharedDatabaseFile));
+  assert.equal(savedSharedDatabaseFile.records[0].cellName, "테스트 셀");
 
   const authenticatedDiagram = await fetch(`${baseUrl}/assets/line-diagrams/anseong-vector/manifest.json`, { headers: { cookie } });
   assert.equal(authenticatedDiagram.status, 200);
@@ -241,6 +278,11 @@ const noKeyEnvironment = {
   PORT: String(noKeyPort),
   HOST: "127.0.0.1",
   RATIS_AUTH_DB_PATH: authDatabasePath,
+  DATABASE_URL: "",
+  R2_ACCOUNT_ID: "",
+  R2_ACCESS_KEY_ID: "",
+  R2_SECRET_ACCESS_KEY: "",
+  R2_BUCKET: "",
 };
 delete noKeyEnvironment.RATIS_MASTER_KEY;
 const noKeyChild = spawn(process.execPath, [join(root, "server.mjs")], {
@@ -251,6 +293,9 @@ const noKeyChild = spawn(process.execPath, [join(root, "server.mjs")], {
 
 try {
   await waitForServer(noKeyBaseUrl, noKeyChild);
+  const noKeyHealth = await fetch(`${noKeyBaseUrl}/api/health`);
+  assert.equal(noKeyHealth.status, 200);
+  assert.equal((await noKeyHealth.json()).authConfigured, false);
   const unavailableLogin = await fetch(`${noKeyBaseUrl}/api/auth/login`, {
     method: "POST",
     headers: { "content-type": "application/json" },

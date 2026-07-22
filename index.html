@@ -128,7 +128,7 @@
           <div class="panel-head"><h2>국사 평면도 DB</h2><button id="clearFloorPlansBtn" class="danger-btn" type="button">전체 삭제</button></div>
           <div class="floor-plan-form floor-plan-image-form">
             <label>국사명 <input id="floorPlanStation" placeholder="예: 중앙국사"></label>
-            <label>평면도 이미지 <input id="floorPlanFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp"><small>수정할 때 선택하지 않으면 기존 이미지 유지</small></label>
+            <label>평면도 파일 <input id="floorPlanFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp,.xlsx,.xls"><small>이미지 또는 기존 Excel 평면도 · 수정할 때 선택하지 않으면 기존 이미지 유지</small></label>
             <button id="saveFloorPlanBtn" class="secondary-btn" type="button">등록 / 수정</button>
             <button id="cancelFloorPlanEditBtn" class="floor-plan-cancel-btn hidden" type="button">수정 취소</button>
           </div>
@@ -166,6 +166,7 @@
           <div id="sharedDbSummary" class="shared-db-summary"></div>
           <div class="tool-row shared-db-actions">
             <button id="publishSharedDbBtn" class="secondary-btn" type="button">GitHub 공용 DB 게시</button>
+            <button id="saveSharedDbServerBtn" class="secondary-btn" type="button">현재 DB 로컬 적용</button>
             <button id="downloadSharedDbBtn" class="secondary-btn" type="button">공용 DB 파일 저장</button>
             <button id="refreshSharedDbBtn" class="secondary-btn" type="button">공용 DB 새로고침</button>
           </div>
@@ -224,6 +225,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=CATV0721MANAGEDAUTH2"></script>
+  <script src="app.js?v=CATV0722SHAREDDBNOAUTH2"></script>
 </body>
 </html>

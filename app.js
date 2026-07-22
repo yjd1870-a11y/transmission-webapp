@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
   sharedDbDirty: "catvSharedDbDirty",
 };
 
-const APP_VERSION = "CATV0708-DBSYNC";
+const APP_VERSION = "CATV0722-SHAREDDB-NO-AUTH";
 const SHARED_DB_PATH = "assets/shared-db.json";
 const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
 const GITHUB_SHARED_DB_BRANCH = "main";
@@ -478,8 +478,7 @@ function setSharedDbClean(version) {
 
 function hasSharedDbContent(db) {
   return Boolean(db)
-    && (Array.isArray(db.users)
-      || Array.isArray(db.records)
+    && (Array.isArray(db.records)
       || Array.isArray(db.floorPlans)
       || Array.isArray(db.b2cLines)
       || Array.isArray(db.b2cDiagrams));
@@ -489,7 +488,6 @@ async function applySharedDatabase(db) {
   if (!hasSharedDbContent(db)) return false;
   suppressSharedDbDirty = true;
   try {
-    if (Array.isArray(db.users)) saveUsers(db.users);
     if (Array.isArray(db.records)) saveRecords(db.records.map(normalizeRecord));
     if (Array.isArray(db.floorPlans)) saveFloorPlans(db.floorPlans);
     if (Array.isArray(db.b2cLines)) saveB2CLines(db.b2cLines);
@@ -533,7 +531,6 @@ async function sharedDatabaseSnapshot() {
     version: updatedAt,
     appVersion: APP_VERSION,
     updatedAt,
-    users: loadUsers(),
     records: loadRecords(),
     floorPlans: loadFloorPlans(),
     b2cLines: loadB2CLines(),
@@ -552,6 +549,32 @@ async function downloadSharedDatabase() {
   downloadBlob(new Blob([content], { type: "application/json;charset=utf-8" }), sharedDbFileName());
   setSharedDbClean(sharedDbVersionOf(db));
   renderSharedDbAdmin();
+}
+
+async function saveSharedDatabaseLocally() {
+  const status = qs("#sharedDbMessage");
+  const setStatus = (text, isError = false) => {
+    if (!status) return;
+    status.textContent = text;
+    status.classList.toggle("is-error", isError);
+  };
+  try {
+    setStatus("가입 DB를 제외한 현재 DB를 로컬 공용 파일에 저장하는 중입니다.");
+    const db = await sharedDatabaseSnapshot();
+    const response = await fetch("/api/admin/shared-db", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(db),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.error || "로컬 공용 DB 저장에 실패했습니다.");
+    setSharedDbClean(result.version || sharedDbVersionOf(db));
+    renderSharedDbAdmin();
+    setStatus(`로컬 공용 DB에 저장했습니다. 데이터 ${result.counts?.records || 0}건 · 평면도 ${result.counts?.floorPlans || 0}건 · B2C ${result.counts?.b2cLines || 0}건 · 직선도 ${result.counts?.b2cDiagrams || 0}건`);
+  } catch (error) {
+    setStatus(error.message || "로컬 공용 DB 저장에 실패했습니다.", true);
+  }
 }
 
 async function refreshSharedDatabaseFromSite() {
@@ -1226,6 +1249,82 @@ function filesToDataUrls(files) {
   return Promise.all([...files].map(photoFileToDataUrl));
 }
 
+function storedPhotoId(photoUrl) {
+  const match = String(photoUrl || "").match(/^\/api\/photos\/([0-9a-f-]{36})\/content$/i);
+  return match?.[1] || "";
+}
+
+function dataUrlBlob(dataUrl) {
+  const [metadata, encoded = ""] = String(dataUrl || "").split(",", 2);
+  const contentType = metadata.match(/^data:([^;]+)/i)?.[1] || "application/octet-stream";
+  const bytes = Uint8Array.from(atob(encoded), (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: contentType });
+}
+
+async function remotePhotoUrls(record, type) {
+  const query = new URLSearchParams({ recordKey: record.cellName, type });
+  const response = await fetch(`/api/photos?${query}`, { cache: "no-store", credentials: "same-origin" });
+  const result = await response.json().catch(() => ({}));
+  if (response.status === 503 && result?.code === "PHOTO_STORAGE_DISABLED") return null;
+  if (!response.ok) throw new Error(result?.error || "사진 목록을 불러오지 못했습니다.");
+  return Array.isArray(result.photos) ? result.photos.map((photo) => photo.url).filter(Boolean) : [];
+}
+
+async function uploadPhotoFile(file, record, type, replacedPhotoUrl = "") {
+  const dataUrl = await photoFileToDataUrl(file);
+  const blob = dataUrlBlob(dataUrl);
+  const prepareResponse = await fetch("/api/photos/upload-url", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      recordKey: record.cellName,
+      type,
+      fileName: file.name || "photo",
+      contentType: blob.type,
+      sizeBytes: blob.size,
+      replacesPhotoId: storedPhotoId(replacedPhotoUrl),
+    }),
+  });
+  const prepared = await prepareResponse.json().catch(() => ({}));
+  const localPhotoFallback = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  if (prepareResponse.status === 503 && prepared?.code === "PHOTO_STORAGE_DISABLED" && localPhotoFallback) return dataUrl;
+  if (!prepareResponse.ok) throw new Error(prepared?.error || "사진 업로드를 준비하지 못했습니다.");
+
+  try {
+    const uploadResponse = await fetch(prepared.uploadUrl, {
+      method: "PUT",
+      headers: { "content-type": prepared.contentType },
+      body: blob,
+    });
+    if (!uploadResponse.ok) throw new Error(`R2 사진 전송에 실패했습니다. (${uploadResponse.status})`);
+    const completeResponse = await fetch(`/api/photos/${encodeURIComponent(prepared.photoId)}/complete`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    const completed = await completeResponse.json().catch(() => ({}));
+    if (!completeResponse.ok) throw new Error(completed?.error || "사진 업로드를 완료하지 못했습니다.");
+    return completed.photo.url;
+  } catch (error) {
+    await fetch(`/api/photos/${encodeURIComponent(prepared.photoId)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    }).catch(() => {});
+    throw error;
+  }
+}
+
+async function deleteStoredPhoto(photoUrl) {
+  const photoId = storedPhotoId(photoUrl);
+  if (!photoId) return;
+  const response = await fetch(`/api/photos/${encodeURIComponent(photoId)}`, {
+    method: "DELETE",
+    credentials: "same-origin",
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok && response.status !== 404) throw new Error(result?.error || "사진을 삭제하지 못했습니다.");
+}
+
 function latestRecordSnapshot(record) {
   return loadRecords().find((item) => item.cellName === record.cellName) || record;
 }
@@ -1252,10 +1351,17 @@ async function savePhotoListAndRefresh(record, type, photos) {
   openPhotoGallery(updatedRecord, type);
 }
 
-function openPhotoGallery(record, type) {
+async function openPhotoGallery(record, type) {
   qs("#photoGalleryModal")?.remove();
-  const snapshot = latestRecordSnapshot(record);
-  const photos = readPhotoList(snapshot, type);
+  const latest = latestRecordSnapshot(record);
+  let photos;
+  try {
+    photos = await remotePhotoUrls(latest, type);
+  } catch (error) {
+    alert(error.message || "사진 목록을 불러오지 못했습니다.");
+  }
+  photos = photos ?? readPhotoList(latest, type);
+  const snapshot = normalizeRecord({ ...latest, [`${type}Photos`]: JSON.stringify(photos) });
   const label = type === "onu" ? "ONU" : "UPS";
   const modal = document.createElement("section");
   modal.id = "photoGalleryModal";
@@ -1275,30 +1381,50 @@ function openPhotoGallery(record, type) {
   }));
   modal.querySelector("[data-gallery-add]").addEventListener("change", async (event) => {
     const currentRecord = latestRecordSnapshot(snapshot);
-    const currentPhotos = readPhotoList(currentRecord, type);
+    const currentPhotos = [...photos];
     const availableSlots = Math.max(0, 3 - currentPhotos.length);
-    const additions = await filesToDataUrls([...event.target.files].slice(0, availableSlots));
+    const files = [...event.target.files].slice(0, availableSlots);
     event.target.value = "";
-    if (!additions.length) {
+    if (!files.length) {
       if (currentPhotos.length >= 3) alert("현장사진은 최대 3장까지 등록할 수 있습니다.");
       return;
     }
-    await savePhotoListAndRefresh(currentRecord, type, [...currentPhotos, ...additions]);
+    try {
+      const additions = [];
+      for (const file of files) additions.push(await uploadPhotoFile(file, currentRecord, type));
+      await savePhotoListAndRefresh(currentRecord, type, [...currentPhotos, ...additions]);
+    } catch (error) {
+      alert(error.message || "사진을 등록하지 못했습니다.");
+      await openPhotoGallery(currentRecord, type);
+    }
   });
   modal.querySelectorAll("[data-replace-photo]").forEach((input) => input.addEventListener("change", async (event) => {
-    const index = Number(event.target.dataset.replacePhoto); const [replacement] = await filesToDataUrls(event.target.files);
+    const index = Number(event.target.dataset.replacePhoto);
+    const [file] = event.target.files;
     event.target.value = "";
-    if (!replacement) return;
+    if (!file) return;
     const currentRecord = latestRecordSnapshot(snapshot);
-    const next = readPhotoList(currentRecord, type);
-    next[index] = replacement;
-    await savePhotoListAndRefresh(currentRecord, type, next);
+    try {
+      const replacement = await uploadPhotoFile(file, currentRecord, type, photos[index]);
+      const next = [...photos];
+      next[index] = replacement;
+      await savePhotoListAndRefresh(currentRecord, type, next);
+    } catch (error) {
+      alert(error.message || "사진을 수정하지 못했습니다.");
+      await openPhotoGallery(currentRecord, type);
+    }
   }));
   modal.querySelectorAll("[data-gallery-delete]").forEach((button) => button.addEventListener("click", async () => {
     const currentRecord = latestRecordSnapshot(snapshot);
-    const next = readPhotoList(currentRecord, type);
-    next.splice(Number(button.dataset.galleryDelete), 1);
-    await savePhotoListAndRefresh(currentRecord, type, next);
+    const index = Number(button.dataset.galleryDelete);
+    try {
+      await deleteStoredPhoto(photos[index]);
+      const next = [...photos];
+      next.splice(index, 1);
+      await savePhotoListAndRefresh(currentRecord, type, next);
+    } catch (error) {
+      alert(error.message || "사진을 삭제하지 못했습니다.");
+    }
   }));
 }
 
@@ -1807,7 +1933,6 @@ function renderSharedDbAdmin() {
   const version = localStorage.getItem(STORAGE_KEYS.sharedDbVersion) || "공용 DB 미적용";
   if (!summary) return;
   summary.innerHTML = `
-    <span>가입 ${loadUsers().length}건</span>
     <span>데이터 ${loadRecords().length}건</span>
     <span>평면도 ${loadFloorPlans().length}건</span>
     <span>B2C ${loadB2CLines().length}건</span>
@@ -2234,8 +2359,9 @@ function renderFloorPlanCoordinateEditor() {
   const markers = qs("#floorPlanCoordinateMarkers");
   const list = qs("#floorPlanCoordinateList");
   if (!editor || !image || !markers || !list) return;
-  editor.classList.toggle("hidden", !pendingFloorPlanUpload);
-  if (!pendingFloorPlanUpload) {
+  const hasImageUpload = pendingFloorPlanUpload && pendingFloorPlanUpload.type !== "excel";
+  editor.classList.toggle("hidden", !hasImageUpload);
+  if (!hasImageUpload) {
     image.removeAttribute("src");
     markers.innerHTML = "";
     list.innerHTML = "";
@@ -2371,6 +2497,7 @@ async function prepareFloorPlanImageUpload(event) {
       : floorPlanCoordinateTemplate(stationName, file.name);
     pendingFloorPlanUpload = {
       ...prepared,
+      type: "image",
       fileName: file.name,
       rackCoordinates,
       ...(editingState ? {
@@ -2390,6 +2517,51 @@ async function prepareFloorPlanImageUpload(event) {
     if (!editingState) pendingFloorPlanUpload = null;
     renderFloorPlanCoordinateEditor();
     message.textContent = `평면도 이미지를 준비하지 못했습니다: ${error.message || "이미지 파일을 확인해주세요."}`;
+    message.classList.add("is-error");
+  }
+}
+
+async function prepareFloorPlanUpload(event) {
+  const fileInput = event.currentTarget;
+  const file = fileInput?.files?.[0];
+  const message = qs("#floorPlanMessage");
+  if (!file || !/\.(xlsx|xls)$/i.test(file.name)) {
+    await prepareFloorPlanImageUpload(event);
+    return;
+  }
+  if (!window.XLSX) {
+    message.textContent = "엑셀 처리 모듈을 불러오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.";
+    message.classList.add("is-error");
+    return;
+  }
+  message.textContent = `${file.name} 기존 Excel 평면도를 준비하는 중입니다.`;
+  message.classList.remove("is-error");
+  try {
+    const workbook = XLSX.read(await file.arrayBuffer(), {
+      type: "array",
+      cellStyles: true,
+      cellNF: true,
+      cellText: true,
+      sheetStubs: true,
+      bookFiles: true,
+    });
+    const sheetName = workbook.SheetNames.find((name) => name.includes("평면도")) || workbook.SheetNames[0];
+    if (!sheetName || !workbook.Sheets[sheetName]) throw new Error("평면도 시트를 찾지 못했습니다.");
+    const sheet = restoreStyledEmptyCells(workbook.Sheets[sheetName], workbook, sheetName);
+    if (fileInput.files?.[0] !== file) return;
+    pendingFloorPlanUpload = {
+      type: "excel",
+      fileName: file.name,
+      content: excelPlanHtml(sheet, workbook),
+      rackCoordinates: {},
+    };
+    renderFloorPlanCoordinateEditor();
+    message.textContent = `${file.name} 기존 Excel 평면도 준비가 완료되었습니다. 등록 / 수정을 눌러 저장하세요.`;
+  } catch (error) {
+    console.error("기존 Excel 평면도 준비 실패", error);
+    pendingFloorPlanUpload = null;
+    renderFloorPlanCoordinateEditor();
+    message.textContent = `기존 Excel 평면도를 준비하지 못했습니다: ${error.message || "엑셀 파일을 확인해주세요."}`;
     message.classList.add("is-error");
   }
 }
@@ -2436,9 +2608,30 @@ async function saveFloorPlan() {
   const file = fileInput.files[0];
   const isEditing = Boolean(pendingFloorPlanUpload?.editingPlanId) || Number.isInteger(pendingFloorPlanUpload?.editingPlanIndex);
   if (!stationName) return showMessage("국사명을 입력해주세요.", true);
-  if (!pendingFloorPlanUpload) return showMessage("평면도 이미지를 선택하거나 등록된 평면도의 수정 버튼을 눌러주세요.", true);
-  if (!isEditing && !file) return showMessage("국사명과 평면도 이미지를 모두 선택해주세요.", true);
-  if (file && pendingFloorPlanUpload.fileName !== file.name) return showMessage("이미지 준비가 끝난 뒤 다시 저장해주세요.", true);
+  if (!pendingFloorPlanUpload) return showMessage("평면도 이미지 또는 기존 Excel 평면도를 선택하거나 등록된 평면도의 수정 버튼을 눌러주세요.", true);
+  if (!isEditing && !file) return showMessage("국사명과 평면도 파일을 모두 선택해주세요.", true);
+  if (file && pendingFloorPlanUpload.fileName !== file.name) return showMessage("평면도 준비가 끝난 뒤 다시 저장해주세요.", true);
+  if (pendingFloorPlanUpload.type === "excel") {
+    const now = new Date().toISOString();
+    const plans = loadFloorPlans().filter((item) => floorPlanStationKey(item.stationName) !== floorPlanStationKey(stationName));
+    plans.push({
+      id: createDbSourceId("floor"),
+      stationName,
+      stationAliases: [stationName, file.name.replace(/\.(xlsx|xls)$/i, "")],
+      fileName: file.name,
+      createdAt: now,
+      updatedAt: "",
+      type: "excel",
+      content: pendingFloorPlanUpload.content,
+    });
+    saveFloorPlans(plans);
+    pendingFloorPlanUpload = null;
+    resetFloorPlanForm();
+    renderFloorPlanCoordinateEditor();
+    renderFloorPlansAdmin();
+    showMessage(`${stationName} 기존 Excel 평면도 등록이 완료되었습니다.`);
+    return;
+  }
   const rackValues = Object.keys(pendingFloorPlanUpload.rackCoordinates || {});
   if (!rackValues.length) return showMessage("조회 위치 표시를 위해 노드명 또는 랙 좌표를 한 개 이상 지정해주세요.", true);
 
@@ -5807,7 +6000,7 @@ function bindEvents() {
   qs("#clearFloorPlansBtn").addEventListener("click", clearFloorPlansDatabase);
   qs("#clearB2CBtn").addEventListener("click", clearB2CDatabase);
   qs("#dataFile").addEventListener("change", (event) => importExcel(event, "records"));
-  qs("#floorPlanFile").addEventListener("change", prepareFloorPlanImageUpload);
+  qs("#floorPlanFile").addEventListener("change", prepareFloorPlanUpload);
   qs("#floorPlanCoordinateStage").addEventListener("click", setFloorPlanCoordinate);
   qs("#clearFloorPlanCoordinatesBtn").addEventListener("click", () => {
     if (!pendingFloorPlanUpload) return;
@@ -5819,6 +6012,7 @@ function bindEvents() {
   qs("#cancelFloorPlanEditBtn")?.addEventListener("click", cancelFloorPlanEdit);
   qs("#saveB2CBtn").addEventListener("click", saveB2CFile);
   qs("#publishSharedDbBtn")?.addEventListener("click", publishSharedDatabaseToGitHub);
+  qs("#saveSharedDbServerBtn")?.addEventListener("click", saveSharedDatabaseLocally);
   qs("#downloadSharedDbBtn")?.addEventListener("click", downloadSharedDatabase);
   qs("#refreshSharedDbBtn")?.addEventListener("click", refreshSharedDatabaseFromSite);
   qs("#userAccountForm").addEventListener("submit", createManagedUser);

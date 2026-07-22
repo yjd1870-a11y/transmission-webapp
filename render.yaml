@@ -13,9 +13,19 @@ services:
         value: production
       - key: HOST
         value: 0.0.0.0
+      - key: RATIS_MASTER_KEY
+        sync: false
       - key: RATIS_AUTH_DB_PATH
         value: /var/data/auth-users.json
-      - key: RATIS_MASTER_KEY
+      - key: DATABASE_URL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
         sync: false
     disk:
       name: ratis-auth-data
