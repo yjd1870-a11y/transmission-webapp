@@ -8,12 +8,17 @@ const STORAGE_KEYS = {
   sharedDbDirty: "catvSharedDbDirty",
 };
 
-const APP_VERSION = "CATV0723-LINE-DIAGRAM-FAST-CACHE";
+const APP_VERSION = "CATV0724-ROLE-SYNC";
 const LINE_DIAGRAM_RENDERER_VERSION = "excel-picture-v8-exact-image-only";
 const SHARED_DB_PATH = "/assets/shared-db.json";
 const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
 const GITHUB_SHARED_DB_BRANCH = "main";
 let suppressSharedDbDirty = false;
+let sharedDbSyncTimer = null;
+let sharedDbSaveInFlight = false;
+let sharedDbSaveQueued = false;
+let sharedDbChangeSequence = 0;
+let userDbRefreshPromise = null;
 let mobileExitBackAt = 0;
 let mobileExitBackTimer = null;
 let activePhotoLightboxClose = null;
@@ -168,8 +173,11 @@ function ensureSeedData() {
 }
 
 function markSharedDbDirty() {
-  if (suppressSharedDbDirty) return;
+  if (suppressSharedDbDirty || authenticatedUser?.role !== "admin") return;
+  sharedDbChangeSequence += 1;
   localStorage.setItem(STORAGE_KEYS.sharedDbDirty, "true");
+  scheduleSharedDatabaseSync();
+  renderSharedDbAdmin();
 }
 
 function loadUsers() {
@@ -178,7 +186,6 @@ function loadUsers() {
 
 function saveUsers(users) {
   localStorage.setItem(STORAGE_KEYS.users, JSON.stringify(users));
-  markSharedDbDirty();
 }
 
 function loadRecords() {
@@ -422,6 +429,7 @@ async function saveB2CDiagramsForStation(stationName, diagrams, sourceId = "") {
       tx.onabort = () => reject(tx.error || new Error("직선도 DB 저장이 중단되었습니다."));
     });
     localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
+    markSharedDbDirty();
   } finally {
     db.close();
   }
@@ -447,6 +455,7 @@ async function deleteB2CDiagramsForSource({ sourceId = "", stationName = "", fil
       tx.onerror = () => reject(tx.error || new Error("직선도 DB 삭제에 실패했습니다."));
       tx.onabort = () => reject(tx.error || new Error("직선도 DB 삭제가 중단되었습니다."));
     });
+    markSharedDbDirty();
   } finally {
     db.close();
   }
@@ -462,6 +471,7 @@ async function deleteAllB2CDiagrams() {
       tx.onerror = () => reject(tx.error || new Error("직선도 DB 전체 삭제에 실패했습니다."));
       tx.onabort = () => reject(tx.error || new Error("직선도 DB 전체 삭제가 중단되었습니다."));
     });
+    markSharedDbDirty();
   } finally {
     db.close();
   }
@@ -585,8 +595,9 @@ async function loadSharedDatabaseFromSite({ force = false } = {}) {
     const version = sharedDbVersionOf(db);
     const currentVersion = localStorage.getItem(STORAGE_KEYS.sharedDbVersion) || "";
     const isDirty = localStorage.getItem(STORAGE_KEYS.sharedDbDirty) === "true";
-    if (!force && isDirty && currentVersion && version !== currentVersion) return false;
-    if (!force && version && version === currentVersion) return true;
+    const hasAdminDraft = authenticatedUser?.role === "admin" && isDirty;
+    if (!force && hasAdminDraft) return false;
+    if (!force && !isDirty && version && version === currentVersion) return true;
     return applySharedDatabase(db);
   } catch (error) {
     console.warn("공용 DB를 불러오지 못했습니다.", error);
@@ -627,15 +638,37 @@ async function downloadSharedDatabase() {
   renderSharedDbAdmin();
 }
 
-async function saveSharedDatabaseLocally() {
+function setSharedDatabaseStatus(text, isError = false) {
   const status = qs("#sharedDbMessage");
-  const setStatus = (text, isError = false) => {
-    if (!status) return;
-    status.textContent = text;
-    status.classList.toggle("is-error", isError);
-  };
+  if (!status) return;
+  status.textContent = text;
+  status.classList.toggle("is-error", isError);
+}
+
+function scheduleSharedDatabaseSync({ delay = 1800 } = {}) {
+  if (suppressSharedDbDirty || authenticatedUser?.role !== "admin") return;
+  window.clearTimeout(sharedDbSyncTimer);
+  sharedDbSyncTimer = window.setTimeout(() => {
+    sharedDbSyncTimer = null;
+    saveSharedDatabaseToServer({ automatic: true });
+  }, delay);
+}
+
+async function saveSharedDatabaseToServer({ automatic = false } = {}) {
+  if (authenticatedUser?.role !== "admin") {
+    setSharedDatabaseStatus("관리자 계정만 서버 DB를 저장할 수 있습니다.", true);
+    return false;
+  }
+  if (sharedDbSaveInFlight) {
+    sharedDbSaveQueued = true;
+    if (!automatic) setSharedDatabaseStatus("서버 DB 저장이 진행 중입니다. 현재 변경분을 이어서 저장합니다.");
+    return false;
+  }
+
+  sharedDbSaveInFlight = true;
+  const startedSequence = sharedDbChangeSequence;
   try {
-    setStatus("가입 DB를 제외한 현재 DB를 로컬 공용 파일에 저장하는 중입니다.");
+    setSharedDatabaseStatus(automatic ? "변경된 자료를 서버 DB에 자동 저장하는 중입니다." : "현재 자료를 서버 DB에 저장하는 중입니다.");
     const db = await sharedDatabaseSnapshot();
     const response = await fetch("/api/admin/shared-db", {
       method: "POST",
@@ -644,13 +677,39 @@ async function saveSharedDatabaseLocally() {
       body: JSON.stringify(db),
     });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result?.error || "로컬 공용 DB 저장에 실패했습니다.");
-    setSharedDbClean(result.version || sharedDbVersionOf(db));
+    if (!response.ok) throw new Error(result?.error || "서버 DB 저장에 실패했습니다.");
+    if (sharedDbChangeSequence === startedSequence) {
+      setSharedDbClean(result.version || sharedDbVersionOf(db));
+    } else {
+      localStorage.setItem(STORAGE_KEYS.sharedDbDirty, "true");
+      sharedDbSaveQueued = true;
+    }
     renderSharedDbAdmin();
-    setStatus(`로컬 공용 DB에 저장했습니다. 데이터 ${result.counts?.records || 0}건 · 평면도 ${result.counts?.floorPlans || 0}건 · B2C ${result.counts?.b2cLines || 0}건 · 직선도 ${result.counts?.b2cDiagrams || 0}건`);
+    const storageLabel = result.storage === "neon" ? "Neon 서버 DB" : "서버 DB";
+    setSharedDatabaseStatus(`${storageLabel} 저장 완료 · 데이터 ${result.counts?.records || 0}건 · 평면도 ${result.counts?.floorPlans || 0}건 · B2C ${result.counts?.b2cLines || 0}건 · 직선도 ${result.counts?.b2cDiagrams || 0}건`);
+    return true;
   } catch (error) {
-    setStatus(error.message || "로컬 공용 DB 저장에 실패했습니다.", true);
+    localStorage.setItem(STORAGE_KEYS.sharedDbDirty, "true");
+    renderSharedDbAdmin();
+    setSharedDatabaseStatus(`${automatic ? "자동 " : ""}서버 DB 저장 실패: ${error.message || "네트워크 연결을 확인해주세요."}`, true);
+    return false;
+  } finally {
+    sharedDbSaveInFlight = false;
+    if (sharedDbSaveQueued) {
+      sharedDbSaveQueued = false;
+      scheduleSharedDatabaseSync({ delay: 150 });
+    }
   }
+}
+
+async function refreshSharedDatabaseForUser() {
+  if (authenticatedUser?.role !== "user") return false;
+  if (userDbRefreshPromise) return userDbRefreshPromise;
+  userDbRefreshPromise = loadSharedDatabaseFromSite()
+    .finally(() => {
+      userDbRefreshPromise = null;
+    });
+  return userDbRefreshPromise;
 }
 
 async function refreshSharedDatabaseFromSite() {
@@ -841,6 +900,32 @@ async function restoreSession() {
   }
 }
 
+function showAuthenticatedHome() {
+  if (authenticatedUser?.role === "admin") {
+    if (window.location.pathname !== "/admin" || window.location.search || window.location.hash) {
+      window.history.replaceState(null, "", "/admin");
+    }
+    showView("adminView");
+    window.requestAnimationFrame(() => {
+      renderAdmin();
+      if (localStorage.getItem(STORAGE_KEYS.sharedDbDirty) === "true") {
+        scheduleSharedDatabaseSync({ delay: 100 });
+      }
+    });
+    return true;
+  }
+
+  if (authenticatedUser?.role === "user") {
+    if (window.location.pathname !== "/" || window.location.search || window.location.hash) {
+      window.history.replaceState(null, "", "/");
+    }
+    showSearchScreen();
+    return true;
+  }
+
+  return false;
+}
+
 async function login(event) {
   event.preventDefault();
   const id = qs("#loginId").value.trim();
@@ -859,15 +944,7 @@ async function login(event) {
       if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
       message.textContent = "";
       qs("#loginForm").reset();
-      const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
-      if (authenticatedUser.role === "admin" && requestedAdmin) {
-        window.history.replaceState(null, "", "/admin");
-        showView("adminView");
-        window.requestAnimationFrame(() => renderAdmin());
-      } else {
-        if (window.location.pathname !== "/") window.history.replaceState(null, "", "/");
-        showSearchScreen();
-      }
+      showAuthenticatedHome();
       return;
     }
     message.textContent = result?.error || "아이디 또는 비밀번호를 확인해주세요.";
@@ -910,6 +987,12 @@ function togglePasswordVisibility() {
 }
 
 async function logout() {
+  if (authenticatedUser?.role === "admin" && localStorage.getItem(STORAGE_KEYS.sharedDbDirty) === "true") {
+    await saveSharedDatabaseToServer({ automatic: true });
+  }
+  window.clearTimeout(sharedDbSyncTimer);
+  sharedDbSyncTimer = null;
+  sharedDbSaveQueued = false;
   if (authenticatedUser || ["/admin", "/admin/"].includes(window.location.pathname)) {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
   }
@@ -2074,7 +2157,7 @@ function renderSharedDbAdmin() {
     <span>데이터 ${loadRecords().length}건</span>
     <span>평면도 ${loadFloorPlans().length}건</span>
     <span>B2C ${loadB2CLines().length}건</span>
-    <strong>${dirty ? "공용 게시 필요" : "공용 DB 동기화됨"}</strong>
+    <strong>${dirty ? "서버 저장 대기" : "서버 DB 동기화됨"}</strong>
     <small>${escapeHtml(version)}</small>
   `;
 }
@@ -6324,7 +6407,7 @@ function bindEvents() {
   qs("#cancelFloorPlanEditBtn")?.addEventListener("click", cancelFloorPlanEdit);
   qs("#saveB2CBtn").addEventListener("click", saveB2CFile);
   qs("#publishSharedDbBtn")?.addEventListener("click", publishSharedDatabaseToGitHub);
-  qs("#saveSharedDbServerBtn")?.addEventListener("click", saveSharedDatabaseLocally);
+  qs("#saveSharedDbServerBtn")?.addEventListener("click", () => saveSharedDatabaseToServer());
   qs("#downloadSharedDbBtn")?.addEventListener("click", downloadSharedDatabase);
   qs("#refreshSharedDbBtn")?.addEventListener("click", refreshSharedDatabaseFromSite);
   qs("#userAccountForm").addEventListener("submit", createManagedUser);
@@ -6332,6 +6415,10 @@ function bindEvents() {
   qs("#closeUserAccountDialogBtn").addEventListener("click", () => qs("#userAccountDialog").close());
   qs("#closePasswordResetDialogBtn").addEventListener("click", () => qs("#passwordResetDialog").close());
   window.addEventListener("popstate", handleAppRouteBack);
+  window.addEventListener("focus", refreshSharedDatabaseForUser);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") refreshSharedDatabaseForUser();
+  });
 }
 
 async function initApp() {
@@ -6347,17 +6434,7 @@ async function initApp() {
     if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
   }
   const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
-  if (authenticatedUser?.role === "admin" && requestedAdmin) {
-    showView("adminView");
-    window.requestAnimationFrame(() => renderAdmin());
-    return;
-  }
-
-  if (authenticatedUser?.role === "user" || authenticatedUser?.role === "admin") {
-    if (requestedAdmin || window.location.pathname !== "/") window.history.replaceState(null, "", "/");
-    showSearchScreen();
-    return;
-  }
+  if (showAuthenticatedHome()) return;
 
   showView("loginView");
   const authReason = new URLSearchParams(window.location.search).get("auth");
