@@ -8,8 +8,9 @@ const STORAGE_KEYS = {
   sharedDbDirty: "catvSharedDbDirty",
 };
 
-const APP_VERSION = "CATV0722-SHAREDDB-NO-AUTH";
-const SHARED_DB_PATH = "assets/shared-db.json";
+const APP_VERSION = "CATV0723-LINE-DIAGRAM-FAST-CACHE";
+const LINE_DIAGRAM_RENDERER_VERSION = "excel-picture-v8-exact-image-only";
+const SHARED_DB_PATH = "/assets/shared-db.json";
 const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
 const GITHUB_SHARED_DB_BRANCH = "main";
 let suppressSharedDbDirty = false;
@@ -198,13 +199,20 @@ function saveFloorPlans(plans) {
   markSharedDbDirty();
 }
 
-function loadB2CLines() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEYS.b2cLines) || "[]");
+let b2cLinesCache = null;
+
+function legacyB2CLines() {
+  try {
+    const lines = JSON.parse(localStorage.getItem(STORAGE_KEYS.b2cLines) || "[]");
+    return Array.isArray(lines) ? lines : [];
+  } catch {
+    return [];
+  }
 }
 
-function saveB2CLines(lines) {
-  localStorage.setItem(STORAGE_KEYS.b2cLines, JSON.stringify(lines));
-  markSharedDbDirty();
+function loadB2CLines() {
+  if (!Array.isArray(b2cLinesCache)) b2cLinesCache = legacyB2CLines();
+  return b2cLinesCache;
 }
 
 function createDbSourceId(prefix = "db") {
@@ -214,8 +222,10 @@ function createDbSourceId(prefix = "db") {
 }
 
 const APP_DB_NAME = "catvTransmissionApp";
-const APP_DB_VERSION = 2;
+const APP_DB_VERSION = 3;
 const B2C_DIAGRAM_STORE = "b2cDiagrams";
+const B2C_LINE_STORE = "b2cLines";
+const B2C_LINE_SNAPSHOT_ID = "current";
 const ADMIN_RECORD_INITIAL_LIMIT = 80;
 const ADMIN_RECORD_SEARCH_LIMIT = 160;
 let adminDataSearchTimer = null;
@@ -224,9 +234,15 @@ const PRESET_LINE_DIAGRAMS = [
   {
     fileName: "안성국사(직선도).xlsx",
     manifestKey: "anseong",
-    manifestUrl: "assets/line-diagrams/anseong-vector/manifest.json",
-    assetBaseUrl: "assets/line-diagrams/anseong-vector/",
-    fallbackAssetBaseUrl: "assets/line-diagrams/anseong-hd/",
+    manifestUrl: "/assets/line-diagrams/anseong-vector/manifest.json",
+    assetBaseUrl: "/assets/line-diagrams/anseong-vector/",
+    fallbackAssetBaseUrl: "/assets/line-diagrams/anseong-hd/",
+  },
+  {
+    fileName: "\uB9C8\uD3C9\uAD6D\uC0AC(\uC9C1\uC120\uB3C4).xlsx",
+    manifestKey: "mapyeong",
+    manifestUrl: "/assets/line-diagrams/mapyeong-vector/manifest.json",
+    assetBaseUrl: "/assets/line-diagrams/mapyeong-vector/",
   },
 ];
 const presetLineDiagramManifestCache = new Map();
@@ -241,8 +257,8 @@ function promiseWithTimeout(promise, timeoutMs, message) {
 
 function loadPdfJsRuntime() {
   if (!pdfJsRuntimePromise) {
-    const moduleUrl = new URL("assets/vendor/pdfjs/pdf.min.js", window.location.href).href;
-    const workerUrl = new URL("assets/vendor/pdfjs/pdf.worker.min.js", window.location.href).href;
+    const moduleUrl = new URL("/assets/vendor/pdfjs/pdf.min.js", window.location.origin).href;
+    const workerUrl = new URL("/assets/vendor/pdfjs/pdf.worker.min.js", window.location.origin).href;
     pdfJsRuntimePromise = promiseWithTimeout(
       import(moduleUrl).then((pdfjs) => {
         pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -305,7 +321,7 @@ async function buildPresetLineDiagrams(stationName, fileName, nodeNamesBySheet =
       searchTargets: entry.searchTargets || [],
       baseWidth: entry.width,
       baseHeight: entry.height,
-      imageFormat: "png",
+      imageFormat: isVectorPdf ? "pdf" : "png",
       renderer: isVectorPdf ? "excel-vector-pdf" : "excel-original",
     };
   });
@@ -327,6 +343,9 @@ function openAppDb() {
       if (!store.indexNames.contains("sourceId")) {
         store.createIndex("sourceId", "sourceId", { unique: false });
       }
+      if (!db.objectStoreNames.contains(B2C_LINE_STORE)) {
+        db.createObjectStore(B2C_LINE_STORE, { keyPath: "id" });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error || new Error("브라우저 DB를 열지 못했습니다."));
@@ -344,7 +363,15 @@ async function loadB2CDiagrams(stationName = "") {
   const db = await openAppDb();
   try {
     const tx = db.transaction(B2C_DIAGRAM_STORE, "readonly");
-    const diagrams = await requestToPromise(tx.objectStore(B2C_DIAGRAM_STORE).getAll());
+    const storedDiagrams = await requestToPromise(tx.objectStore(B2C_DIAGRAM_STORE).getAll());
+    const diagrams = storedDiagrams.map(repairLegacySvgDiagram);
+    const repairedDiagrams = diagrams.filter((diagram, index) => diagram !== storedDiagrams[index]);
+    if (repairedDiagrams.length) {
+      const repairTx = db.transaction(B2C_DIAGRAM_STORE, "readwrite");
+      const repairStore = repairTx.objectStore(B2C_DIAGRAM_STORE);
+      repairedDiagrams.forEach((diagram) => repairStore.put(diagram));
+      await transactionToPromise(repairTx, "기존 SVG 직선도 화면 보정 저장에 실패했습니다.");
+    }
     const selected = String(stationName || "").trim()
       ? diagrams.filter((diagram) => sameStationName(diagram.stationName, stationName))
       : diagrams;
@@ -383,11 +410,11 @@ async function saveB2CDiagramsForStation(stationName, diagrams, sourceId = "") {
     const tx = db.transaction(B2C_DIAGRAM_STORE, "readwrite");
     const store = tx.objectStore(B2C_DIAGRAM_STORE);
     diagrams.forEach((diagram) => {
-      store.put({
+      store.put(repairLegacySvgDiagram({
         ...diagram,
         sourceId: sourceId || diagram.sourceId || "",
         id: `${stationKey(stationName)}::${sourceId || diagram.sourceId || "legacy"}::${diagram.sheetName}`,
-      });
+      }));
     });
     await new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
@@ -450,11 +477,11 @@ async function replaceB2CDiagrams(diagrams = []) {
       const station = stationKey(diagram.stationName);
       const source = diagram.sourceId || "shared";
       const sheet = diagram.sheetName || diagram.nodeName || Math.random().toString(36).slice(2);
-      store.put({
+      store.put(repairLegacySvgDiagram({
         ...diagram,
         sourceId: source,
         id: diagram.id || `${station}::${source}::${sheet}`,
-      });
+      }));
     });
     await new Promise((resolve, reject) => {
       tx.oncomplete = resolve;
@@ -484,13 +511,62 @@ function hasSharedDbContent(db) {
       || Array.isArray(db.b2cDiagrams));
 }
 
+function transactionToPromise(transaction, errorMessage) {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error || new Error(errorMessage));
+    transaction.onabort = () => reject(transaction.error || new Error(errorMessage));
+  });
+}
+
+async function persistB2CLines(lines) {
+  const db = await openAppDb();
+  try {
+    const tx = db.transaction(B2C_LINE_STORE, "readwrite");
+    tx.objectStore(B2C_LINE_STORE).put({
+      id: B2C_LINE_SNAPSHOT_ID,
+      lines,
+      updatedAt: new Date().toISOString(),
+    });
+    await transactionToPromise(tx, "선번장 검색 DB 저장에 실패했습니다.");
+  } finally {
+    db.close();
+  }
+}
+
+async function hydrateB2CLines() {
+  const legacyLines = legacyB2CLines();
+  try {
+    const db = await openAppDb();
+    try {
+      const tx = db.transaction(B2C_LINE_STORE, "readonly");
+      const snapshot = await requestToPromise(tx.objectStore(B2C_LINE_STORE).get(B2C_LINE_SNAPSHOT_ID));
+      b2cLinesCache = Array.isArray(snapshot?.lines) ? snapshot.lines : legacyLines;
+    } finally {
+      db.close();
+    }
+    if (legacyLines.length && b2cLinesCache === legacyLines) await persistB2CLines(legacyLines);
+    localStorage.removeItem(STORAGE_KEYS.b2cLines);
+  } catch (error) {
+    console.warn("IndexedDB 직선도 목록을 불러오지 못해 기존 브라우저 저장소를 사용합니다.", error);
+    b2cLinesCache = legacyLines;
+  }
+}
+
+async function saveB2CLines(lines) {
+  b2cLinesCache = Array.isArray(lines) ? lines : [];
+  await persistB2CLines(b2cLinesCache);
+  localStorage.removeItem(STORAGE_KEYS.b2cLines);
+  markSharedDbDirty();
+}
+
 async function applySharedDatabase(db) {
   if (!hasSharedDbContent(db)) return false;
   suppressSharedDbDirty = true;
   try {
     if (Array.isArray(db.records)) saveRecords(db.records.map(normalizeRecord));
     if (Array.isArray(db.floorPlans)) saveFloorPlans(db.floorPlans);
-    if (Array.isArray(db.b2cLines)) saveB2CLines(db.b2cLines);
+    if (Array.isArray(db.b2cLines)) await saveB2CLines(db.b2cLines);
     if (Array.isArray(db.b2cDiagrams)) await replaceB2CDiagrams(db.b2cDiagrams);
     setSharedDbClean(sharedDbVersionOf(db));
     return true;
@@ -718,8 +794,29 @@ function showView(viewId) {
     const message = qs("#loginMessage");
     if (message) message.textContent = "관리자 인증이 필요합니다.";
   }
-  ["loginView", "userView", "rackView", "adminView"].forEach((id) => qs(`#${id}`).classList.add("hidden"));
-  qs(`#${viewId}`).classList.remove("hidden");
+  ["loginView", "userView", "rackView", "adminView"].forEach((id) => {
+    const view = qs(`#${id}`);
+    const isActive = id === viewId;
+    view.classList.toggle("hidden", !isActive);
+    view.classList.toggle("active-view", isActive);
+    view.toggleAttribute("hidden", !isActive);
+    view.setAttribute("aria-hidden", isActive ? "false" : "true");
+  });
+  document.body.dataset.view = viewId;
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+}
+
+function setUserPage(page, title = "CELL 및 전용선 조회") {
+  const userView = qs("#userView");
+  if (!userView) return;
+  userView.dataset.page = page;
+  const titleNode = qs("#userView .topbar span");
+  if (titleNode) titleNode.textContent = title;
+  if (page === "search") {
+    if (window.location.hash) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    return;
+  }
+  if (window.location.hash !== "#result") window.history.pushState(null, "", "#result");
 }
 
 async function requestLogin(id, password) {
@@ -757,11 +854,13 @@ async function login(event) {
     const { response, result } = await requestLogin(id, password);
     if (response.ok && result?.authenticated && ["user", "admin"].includes(result?.user?.role)) {
       authenticatedUser = result.user;
+      persistRememberedLoginId(id);
       const sharedDatabaseLoaded = await loadSharedDatabaseFromSite();
       if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
       message.textContent = "";
       qs("#loginForm").reset();
-      if (authenticatedUser.role === "admin") {
+      const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
+      if (authenticatedUser.role === "admin" && requestedAdmin) {
         window.history.replaceState(null, "", "/admin");
         showView("adminView");
         window.requestAnimationFrame(() => renderAdmin());
@@ -781,6 +880,35 @@ async function login(event) {
   }
 }
 
+function persistRememberedLoginId(id) {
+  const remember = qs("#rememberLoginId")?.checked;
+  if (remember) {
+    localStorage.setItem("catvRememberLoginId", id);
+    return;
+  }
+  localStorage.removeItem("catvRememberLoginId");
+}
+
+function restoreRememberedLoginId() {
+  const savedId = localStorage.getItem("catvRememberLoginId") || "";
+  const loginId = qs("#loginId");
+  const remember = qs("#rememberLoginId");
+  if (!loginId || !remember || !savedId) return;
+  loginId.value = savedId;
+  remember.checked = true;
+  qs("#loginPassword")?.focus();
+}
+
+function togglePasswordVisibility() {
+  const passwordInput = qs("#loginPassword");
+  const toggleButton = qs("#togglePasswordBtn");
+  if (!passwordInput || !toggleButton) return;
+  const nextType = passwordInput.type === "password" ? "text" : "password";
+  passwordInput.type = nextType;
+  toggleButton.classList.toggle("is-visible", nextType === "text");
+  toggleButton.setAttribute("aria-label", nextType === "text" ? "비밀번호 숨기기" : "비밀번호 보기");
+}
+
 async function logout() {
   if (authenticatedUser || ["/admin", "/admin/"].includes(window.location.pathname)) {
     await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }).catch(() => {});
@@ -792,6 +920,7 @@ async function logout() {
 
 function showSearchScreen() {
   showView("userView");
+  setUserPage("search");
   renderEmptyResult("셀명 또는 전용선 주소를 입력한 뒤 조회하세요.");
 }
 
@@ -865,6 +994,7 @@ function searchB2CLines() {
 }
 
 function renderSearchMatches(records) {
+  setUserPage("result", "CELL 조회 결과");
   pendingSearchRecords = records;
   qs("#resultPanel").innerHTML = `
     <section class="search-match-panel">
@@ -893,6 +1023,7 @@ function renderSearchMatches(records) {
 }
 
 function renderB2CSearchMatches(records) {
+  setUserPage("result", "B2C 조회 결과");
   pendingB2CSearchRecords = records;
   qs("#resultPanel").innerHTML = `
     <section class="search-match-panel">
@@ -950,6 +1081,7 @@ function b2cLineDiagramRecord(record, stationAddress = "") {
 }
 
 function renderB2CRecord(record) {
+  setUserPage("result", "B2C 조회 결과");
   const stationAddress = record.stationAddress || stationAddressForB2C(record.stationName);
   qs("#resultPanel").innerHTML = `
     <section class="field-record-sheet b2c-record-sheet kt-field-screen">
@@ -989,6 +1121,9 @@ function renderB2CRecord(record) {
     </section>
   `;
 
+  qs("#resultPanel").querySelectorAll(".field-line-diagram-btn").forEach((button) => {
+    button.textContent = "직선도 보기";
+  });
   qs("#resultPanel").querySelector("[data-b2c-line-diagram]")?.addEventListener("click", () => {
     renderHfcLineDiagram(b2cLineDiagramRecord(record, stationAddress), "b2c");
   });
@@ -1039,6 +1174,7 @@ function lookupTitle(value) {
 function basicInfoCard({ title, stationName, stationAddress }) {
   return `
     <article class="kt-info-card kt-basic-card">
+      <h2>국사 정보</h2>
       <div class="kt-basic-table">
         <div class="kt-basic-row kt-basic-main-row">
           <span class="kt-basic-label">설명</span>
@@ -1136,6 +1272,7 @@ function photoBlock(record, type, title) {
 }
 
 function renderRecordEnhanced(record) {
+  setUserPage("result", "CELL 조회 결과");
   qs("#resultPanel").innerHTML = `
     <section class="field-record-sheet cell-record-sheet kt-field-screen">
       ${basicInfoCard({
@@ -1177,6 +1314,9 @@ function renderRecordEnhanced(record) {
       </article>
     </section>`;
 
+  qs("#resultPanel").querySelectorAll(".field-line-diagram-btn").forEach((button) => {
+    button.textContent = "직선도 보기";
+  });
   qs("#resultPanel").querySelectorAll("[data-rack-equipment]").forEach((button) => button.addEventListener("click", () => renderRackOverview(record, button.dataset.rackEquipment)));
   qs("#resultPanel").querySelectorAll("[data-node-plan]").forEach((button) => button.addEventListener("click", () => renderNodePlanOverview(record, button.dataset.nodeValue, button.dataset.nodePlan)));
   qs("#resultPanel").querySelector("[data-cell-line-diagram]")?.addEventListener("click", () => renderHfcLineDiagram(record, "cell"));
@@ -1686,8 +1826,7 @@ function renderNodePlanOverview(record, nodeValue, equipmentName) {
         <div><span>평면도</span><h1>${escapeHtml(label)} 노드 평면도</h1></div>
         <dl class="rack-meta"><div><dt>노드</dt><dd>${escapeHtml(node) || "-"}</dd></div><div><dt>국사</dt><dd>${escapeHtml(valueText(record, "stationName")) || "-"}</dd></div></dl>
       </div>
-      <div class="diagram-legend"><span class="legend-active"></span> 선택 노드 <span class="legend-rack"></span> 평면도 일치 항목</div>
-      <div class="rack-plan-label">평면도</div>
+      <div class="rack-plan-label">?? ???</div>
       <div class="floor-plan">
         <div class="empty-state">등록된 엑셀 평면도에서 노드명과 같은 셀을 찾습니다.</div>
       </div>
@@ -1732,11 +1871,10 @@ function renderRackOverview(record, equipment) {
   qs("#rackPanel").innerHTML = `
     <section class="rack-sheet rack-diagram-sheet">
       <div class="rack-heading">
-        <div><span>평면도</span><h1>${upper} 평면도</h1></div>
+        <div><span>\uAD6D\uC0AC \uD3C9\uBA74\uB3C4</span><h1>${upper} \uAD6D\uC0AC \uD3C9\uBA74\uB3C4</h1></div>
         <dl class="rack-meta"><div><dt>렉</dt><dd>${location.rack || "-"}</dd></div><div><dt>쉘프</dt><dd>${location.shelf || "-"}</dd></div><div><dt>포트</dt><dd>${location.port || "-"}</dd></div><div><dt>모델명</dt><dd>${valueText(record, `${equipment}Model`) || "-"}</dd></div></dl>
       </div>
-      <div class="diagram-legend"><span class="legend-active"></span> 선택 장비 <span class="legend-rack"></span> 해당 랙 <span class="legend-empty"></span> 설비 위치</div>
-      <div class="rack-plan-label">평면도</div>
+      <div class="rack-plan-label">\uAD6D\uC0AC \uD3C9\uBA74\uB3C4</div>
       <div class="floor-plan">
         <div class="floor-plan-world">
           <div class="plan-site-name">${valueText(record, "stationName") || "국사"}</div>
@@ -1781,7 +1919,7 @@ function renderRackOverview(record, equipment) {
   if (detailButton) {
     detailButton.addEventListener("click", () => renderRackDetail(record, equipment));
   }
-  qs("#rackView .topbar span").textContent = "평면도";
+  qs("#rackView .topbar span").textContent = "\uAD6D\uC0AC \uD3C9\uBA74\uB3C4";
   showView("rackView");
   resetFloorPlanOverview();
 }
@@ -1916,7 +2054,7 @@ function renderB2CAdmin() {
       const lines = loadB2CLines().filter((line) => target.sourceId
         ? line.sourceId !== target.sourceId
         : !(sameStationName(line.stationName, target.stationName) && line.fileName === target.fileName));
-      saveB2CLines(lines);
+      await saveB2CLines(lines);
       try {
         await deleteB2CDiagramsForSource(target);
       } catch (error) {
@@ -2775,6 +2913,40 @@ function workbookZipAdapter(workbook) {
   };
 }
 
+async function workbookDrawingFingerprint(workbook) {
+  if (!globalThis.crypto?.subtle || !workbook?.files) return "";
+  const encoder = new TextEncoder();
+  const entries = Object.entries(workbook.files)
+    .map(([path, file]) => [String(path || "").replace(/^\/+/, ""), file])
+    .filter(([path]) => (
+      path === "xl/workbook.xml"
+      || path === "xl/_rels/workbook.xml.rels"
+      || /^xl\/worksheets\/_rels\/.+\.rels$/i.test(path)
+      || /^xl\/drawings\//i.test(path)
+      || /^xl\/media\//i.test(path)
+      || /^xl\/theme\//i.test(path)
+    ))
+    .sort(([left], [right]) => left.localeCompare(right));
+  if (!entries.length) return "";
+
+  const chunks = [];
+  let totalLength = 0;
+  for (const [path, file] of entries) {
+    const nameBytes = encoder.encode(`${path}\0`);
+    const contentBytes = fileContentBytes(file);
+    chunks.push(nameBytes, contentBytes);
+    totalLength += nameBytes.length + contentBytes.length;
+  }
+  const combined = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", combined));
+  return [...digest].map((value) => value.toString(16).padStart(2, "0")).join("");
+}
+
 async function workbookSheetPathMap(zip) {
   const workbookXml = await zipText(zip, "xl/workbook.xml");
   const relsXml = await zipText(zip, "xl/_rels/workbook.xml.rels");
@@ -3090,12 +3262,18 @@ function drawingShapeText(node) {
 function drawingTextStyle(node) {
   const body = drawingChild(node, "txBody");
   const paragraphProperties = body ? xmlElements(body, "pPr")[0] : null;
-  const runProperties = body ? (xmlElements(body, "rPr")[0] || xmlElements(body, "endParaRPr")[0]) : null;
+  const runPropertiesList = body ? xmlElements(body, "rPr") : [];
+  const runProperties = runPropertiesList[0] || (body ? xmlElements(body, "endParaRPr")[0] : null);
   const bodyProperties = body ? xmlElements(body, "bodyPr")[0] : null;
   const alignment = paragraphProperties?.getAttribute("algn");
   const vertical = bodyProperties?.getAttribute("anchor");
+  const colors = [...new Set([
+    ...runPropertiesList.map((item) => drawingColor(item, "")),
+    drawingColor(runProperties, "#111111"),
+  ].filter(Boolean))];
   return {
     color: drawingColor(runProperties, "#111111"),
+    colors,
     fontPt: Math.max(4, drawingNumber(runProperties, "sz", 700) / 100),
     bold: runProperties?.getAttribute("b") === "1",
     textAlign: alignment === "r" ? "right" : (alignment === "ctr" ? "center" : "left"),
@@ -3476,7 +3654,7 @@ function drawingSvgGeometry(node, xfrm, shapeStyle) {
     ? ` stroke-dasharray="${shapeStyle.dashPattern.map((part) => Math.round(part * strokeWidth)).join(" ")}"`
     : "";
   const common = `fill="${shapeStyle.fill}" stroke="${shapeStyle.stroke}" stroke-width="${strokeWidth.toFixed(0)}" stroke-linecap="butt" stroke-linejoin="miter"${dashArray}`;
-  const lineCommon = `${common} vector-effect="non-scaling-stroke"`;
+  const lineCommon = common;
   const geometry = String(shapeStyle.geometry || "rect");
   const customPath = drawingCustomGeometryPath(node, xfrm);
   if (customPath) {
@@ -3545,12 +3723,52 @@ function drawingFillIsSearchNavy(fill) {
     && blue >= green + 15;
 }
 
+function drawingColorChannels(color) {
+  const match = String(color || "").match(/^#([0-9a-f]{6})$/i);
+  if (!match) return null;
+  return {
+    red: Number.parseInt(match[1].slice(0, 2), 16),
+    green: Number.parseInt(match[1].slice(2, 4), 16),
+    blue: Number.parseInt(match[1].slice(4, 6), 16),
+  };
+}
+
+function drawingColorIsBlack(color) {
+  const channels = drawingColorChannels(color);
+  return Boolean(channels) && Math.max(channels.red, channels.green, channels.blue) <= 35;
+}
+
+function drawingColorIsMapyeongPurple(color) {
+  const channels = drawingColorChannels(color);
+  if (!channels) return false;
+  return channels.red >= 75
+    && channels.red <= 145
+    && channels.green <= 100
+    && channels.blue >= 115
+    && channels.blue <= 205
+    && channels.blue >= channels.red + 25;
+}
+
+function drawingTextIsMapyeongSearchable(text, colors = []) {
+  const value = String(text || "").trim();
+  const compact = normalizeDiagramSearchText(value);
+  if (compact.length < 6 || /^[0-9]+$/.test(compact)) return false;
+  if (/^\s*(?:거리|규격|코드|맨홀|전주)\s*:/i.test(value)) return false;
+
+  const colorList = Array.isArray(colors) ? colors : [colors];
+  if (colorList.some(drawingColorIsMapyeongPurple)) {
+    return /(?:셀명|선번|전용|B2C|#)/i.test(value) || /[가-힣]{4,}/.test(compact);
+  }
+  return colorList.some(drawingColorIsBlack) && /(?:셀명|#G[0-9A-Z]{4,})/i.test(value);
+}
+
 function drawingSvgText(node, xfrm, shapeStyle) {
   const text = drawingShapeText(node);
   if (!text) return "";
   const style = drawingTextStyle(node);
   const darkLabel = drawingFillIsDark(shapeStyle?.fill);
   const searchableLabel = drawingFillIsSearchNavy(shapeStyle?.fill);
+  const mapyeongSearchable = drawingTextIsMapyeongSearchable(text, style.colors);
   const textKey = normalizeDiagramSearchText(text);
   const fontSize = Math.max(4, style.fontPt) * 12700;
   const lines = text.split(/\r?\n/);
@@ -3571,7 +3789,7 @@ function drawingSvgText(node, xfrm, shapeStyle) {
   const tspans = lines.map((line, index) => `<tspan x="${scaledTextX}" dy="${index ? scaledLineHeight : 0}">${escapeHtml(line)}</tspan>`).join("");
   const writingMode = style.verticalText ? ' writing-mode="vertical-rl"' : "";
   const color = darkLabel ? "#ffffff" : style.color;
-  return `<g class="drawing-diagram-text${darkLabel ? " is-dark-label" : ""}" data-diagram-dark="${darkLabel ? "true" : "false"}" data-diagram-searchable="${searchableLabel ? "true" : "false"}" data-diagram-text="${escapeHtml(textKey)}" data-diagram-x="${xfrm.x}" data-diagram-y="${xfrm.y}" data-diagram-width="${xfrm.width}" data-diagram-height="${xfrm.height}" aria-label="${escapeHtml(text)}"><title>${escapeHtml(text)}</title><text x="${scaledTextX}" y="${scaledTextY}" transform="scale(${textScale})" fill="${color}" font-family="'Malgun Gothic','Apple SD Gothic Neo',Arial,sans-serif" font-size="${renderedFontSize}" font-weight="${style.bold ? 800 : 500}" text-anchor="${textAnchor}"${writingMode}>${tspans}</text></g>`;
+  return `<g class="drawing-diagram-text${darkLabel ? " is-dark-label" : ""}" data-diagram-dark="${darkLabel ? "true" : "false"}" data-diagram-searchable="${searchableLabel ? "true" : "false"}" data-diagram-mapyeong-searchable="${mapyeongSearchable ? "true" : "false"}" data-diagram-text="${escapeHtml(textKey)}" data-diagram-x="${xfrm.x}" data-diagram-y="${xfrm.y}" data-diagram-width="${xfrm.width}" data-diagram-height="${xfrm.height}" aria-label="${escapeHtml(text)}"><title>${escapeHtml(text)}</title><text x="${scaledTextX}" y="${scaledTextY}" transform="scale(${textScale})" fill="${color}" font-family="'Malgun Gothic','Apple SD Gothic Neo',Arial,sans-serif" font-size="${renderedFontSize}" font-weight="${style.bold ? 800 : 500}" text-anchor="${textAnchor}"${writingMode}>${tspans}</text></g>`;
 }
 
 function drawingSvgNode(node, imageByRelationship, stats, anchorBounds = null) {
@@ -3677,7 +3895,54 @@ function blobToDataUrl(blob) {
   });
 }
 
-async function drawingDiagramToImageAsset(diagram) {
+function decodeSvgDataUrl(content) {
+  const source = String(content || "");
+  if (!/^data:image\/svg\+xml(?:;[^,]*)?,/i.test(source)) return null;
+  const commaIndex = source.indexOf(",");
+  if (commaIndex < 0) return null;
+  const header = source.slice(0, commaIndex);
+  const body = source.slice(commaIndex + 1);
+  try {
+    if (!/;base64(?:;|$)/i.test(header)) return decodeURIComponent(body);
+    const binary = window.atob(body);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new TextDecoder().decode(bytes);
+  } catch (error) {
+    console.warn("기존 SVG 직선도 내용을 읽지 못했습니다.", error);
+    return null;
+  }
+}
+
+function encodeSvgDataUrl(svgText) {
+  const bytes = new TextEncoder().encode(String(svgText || ""));
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return `data:image/svg+xml;base64,${window.btoa(binary)}`;
+}
+
+function repairLegacySvgDiagram(diagram) {
+  if (!diagram || String(diagram.imageFormat || "").toLowerCase() !== "svg") return diagram;
+  const svgText = decodeSvgDataUrl(diagram.content);
+  if (!svgText || !/non-scaling-stroke/i.test(svgText)) return diagram;
+  const repairedSvg = svgText
+    .replace(/\s+vector-effect=(["'])non-scaling-stroke\1/gi, "")
+    .replace(/vector-effect\s*:\s*non-scaling-stroke\s*;?/gi, "");
+  if (repairedSvg === svgText) return diagram;
+  return {
+    ...diagram,
+    content: encodeSvgDataUrl(repairedSvg),
+    renderer: "browser-svg-v2",
+    legacySvgRepairedAt: new Date().toISOString(),
+  };
+}
+
+async function drawingDiagramToImageAsset(diagram, { includeMapyeongText = false } = {}) {
   const host = document.createElement("div");
   host.style.cssText = "position:fixed;left:-100000px;top:0;z-index:-1;visibility:hidden;pointer-events:none;";
   host.innerHTML = diagram.html;
@@ -3691,7 +3956,9 @@ async function drawingDiagramToImageAsset(diagram) {
     const baseHeight = Number(svg.getAttribute("height")) || Math.max(1, svgRect.height);
     if (!svgRect.width || !svgRect.height) throw new Error("직선도 그림 크기를 확인하지 못했습니다.");
 
-    const searchTargets = [...svg.querySelectorAll('.drawing-diagram-text[data-diagram-searchable="true"]')]
+    const searchTargets = [...svg.querySelectorAll(".drawing-diagram-text")]
+      .filter((item) => item.dataset.diagramSearchable === "true"
+        || (includeMapyeongText && item.dataset.diagramMapyeongSearchable === "true"))
       .map((item) => {
         const parent = item.parentNode;
         if (!parent) return null;
@@ -3736,73 +4003,96 @@ function requiresLocalExcelRenderer() {
 }
 
 async function checkLineDiagramServer() {
-  if (!requiresLocalExcelRenderer()) return;
+  const isLocalPage = requiresLocalExcelRenderer();
+  const healthUrl = isLocalPage ? "/api/health" : "http://127.0.0.1:8000/api/health";
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 5000);
   try {
-    const response = await fetch("/api/health", { cache: "no-store", signal: controller.signal });
+    const response = await fetch(healthUrl, {
+      cache: "no-store",
+      credentials: isLocalPage ? "same-origin" : "omit",
+      signal: controller.signal,
+    });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const status = await response.json();
     if (!status?.ok) throw new Error("변환 API 준비 상태를 확인하지 못했습니다.");
+    if (status.lineDiagramRendererVersion !== LINE_DIAGRAM_RENDERER_VERSION) {
+      throw new Error("실행 중인 로컬 웹앱이 이전 버전입니다.");
+    }
   } catch (error) {
-    throw new Error("직선도 변환 서버가 응답하지 않습니다. '웹사이트 실행.cmd'를 다시 실행한 뒤 등록해주세요.", { cause: error });
+    throw new Error("PC의 로컬 직선도 변환 서버가 준비되지 않았습니다. '웹사이트 실행.cmd'를 다시 실행하고 RATIS_MASTER_KEY를 입력한 뒤 등록해주세요.", { cause: error });
   } finally {
     window.clearTimeout(timer);
   }
 }
 
+function shouldUseVectorPdfLineDiagramExport(fileName) {
+  return String(fileName || "").normalize("NFC").includes("\uB9C8\uD3C9");
+}
+
 async function excelRenderedLineDiagramImages(file) {
   if (!file || !/^https?:$/.test(window.location.protocol)) return new Map();
-  const requiresExcelRenderer = requiresLocalExcelRenderer();
-  try {
-    const response = await fetch("/api/line-diagram-images", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: {
-        "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "x-file-name": encodeURIComponent(file.name || "workbook.xlsx"),
-      },
-      body: file,
-    });
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(details.error
-        ? `Excel 직선도 변환 실패: ${details.error}`
-        : `Excel 직선도 변환 서버 응답 오류 (${response.status})`);
-    }
-    const payload = await response.json();
-    const renderedSheets = payload.sheets || [];
-    if (requiresExcelRenderer && !renderedSheets.length) {
-      throw new Error("Excel 직선도 그림을 한 장도 만들지 못했습니다.");
-    }
-    return new Map(renderedSheets.map((sheet) => [
-      diagramMatchKey(sheet.sheetName),
-      {
-        content: `data:image/png;base64,${sheet.content}`,
-        baseWidth: Number(sheet.width) || 0,
-        baseHeight: Number(sheet.height) || 0,
-        imageFormat: "png",
-        renderer: "excel-picture",
-        searchTargets: (sheet.searchTargets || []).map((target) => ({
-          text: normalizeDiagramSearchText(target.text),
-          label: target.label || target.text || "",
-          left: Number(target.left) || 0,
-          top: Number(target.top) || 0,
-          width: Number(target.width) || 0,
-          height: Number(target.height) || 0,
-        })).filter((target) => target.text.length >= 6 && target.width > 0 && target.height > 0),
-      },
-    ]));
-  } catch (error) {
-    if (requiresExcelRenderer) {
-      if (error instanceof TypeError || error?.name === "AbortError") {
-        throw new Error("직선도 변환 서버에 연결할 수 없습니다. '웹사이트 실행.cmd'를 다시 실행한 뒤 업로드해주세요.", { cause: error });
+  const outputFormat = shouldUseVectorPdfLineDiagramExport(file.name) ? "pdf" : "png";
+  const localRendererUrl = "http://127.0.0.1:8000/api/line-diagram-images";
+  const endpoints = requiresLocalExcelRenderer()
+    ? ["/api/line-diagram-images"]
+    : [localRendererUrl];
+  const errors = [];
+
+  for (const endpoint of endpoints) {
+    try {
+      const isLocalRenderer = endpoint.startsWith("http://127.0.0.1");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: isLocalRenderer ? "omit" : "same-origin",
+        headers: {
+          "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          "x-file-name": encodeURIComponent(file.name || "workbook.xlsx"),
+          "x-line-diagram-output": outputFormat,
+        },
+        body: file,
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(details.error
+          ? `Excel 직선도 이미지 변환 실패: ${details.error}`
+          : `Excel 직선도 이미지 변환 서버 응답 오류 (${response.status})`);
       }
-      throw error;
+      const payload = await response.json();
+      const renderedSheets = payload.sheets || [];
+      if (!renderedSheets.length) throw new Error("Excel 직선도 이미지를 한 장도 만들지 못했습니다.");
+      return new Map(renderedSheets.map((sheet) => {
+        const imageFormat = String(sheet.imageFormat || outputFormat || "png").toLowerCase() === "pdf" ? "pdf" : "png";
+        return [
+        diagramMatchKey(sheet.sheetName),
+        {
+          content: `data:${imageFormat === "pdf" ? "application/pdf" : "image/png"};base64,${sheet.content}`,
+          baseWidth: Number(sheet.width) || 0,
+          baseHeight: Number(sheet.height) || 0,
+          imageFormat,
+          renderer: imageFormat === "pdf" ? "excel-pdf" : "excel-picture",
+          searchTargets: (sheet.searchTargets || []).map((target) => ({
+            text: normalizeDiagramSearchText(target.text),
+            label: target.label || target.text || "",
+            left: Number(target.left) || 0,
+            top: Number(target.top) || 0,
+            width: Number(target.width) || 0,
+            height: Number(target.height) || 0,
+            source: target.source || (imageFormat === "pdf" ? "excel-pdf" : "excel-picture"),
+          })).filter((target) => target.text.length >= 6 && target.width > 0 && target.height > 0),
+        },
+        ];
+      }));
+    } catch (error) {
+      errors.push(error);
+      console.warn(`Excel 원본 이미지 변환 실패 (${endpoint})`, error);
     }
-    console.warn("Excel 원본 그림 변환을 사용할 수 없어 브라우저 변환으로 진행합니다.", error);
-    return new Map();
   }
+
+  throw new Error(
+    "정확한 직선도 이미지를 만들 수 없습니다. 이 PC에서 로컬 웹앱(http://127.0.0.1:8000)을 실행하고 Excel이 설치되어 있는지 확인한 뒤 다시 등록해주세요. 부정확한 브라우저 도형 변환은 저장하지 않습니다.",
+    { cause: errors.at(-1) },
+  );
 }
 
 async function extractSheetDrawingDiagram(zip, sheetPath) {
@@ -3909,107 +4199,80 @@ function workbookLinebookNodes(workbook) {
   return { linebookSheetName, nodes };
 }
 
+function lineDiagramSheetNames(workbook) {
+  return workbook.SheetNames.filter((name) => !/선번장|회선현황|선번표|우선순위|^>>$/i.test(name.trim()));
+}
+
+function isReusableExactLineDiagram(diagram) {
+  return Boolean(diagram?.content)
+    && String(diagram.imageFormat || "").toLowerCase() !== "svg"
+    && !String(diagram.renderer || "").startsWith("browser-svg");
+}
+
+async function reusableExactLineDiagrams(workbook, stationName, fileName, drawingFingerprint) {
+  if (!drawingFingerprint) return null;
+  const sheetNames = lineDiagramSheetNames(workbook);
+  if (!sheetNames.length) return null;
+  const storedDiagrams = await loadB2CDiagrams();
+  const matchingBySheet = new Map();
+  storedDiagrams.forEach((diagram) => {
+    if (diagram.drawingFingerprint !== drawingFingerprint || !isReusableExactLineDiagram(diagram)) return;
+    const key = diagramMatchKey(diagram.sheetName);
+    if (key && !matchingBySheet.has(key)) matchingBySheet.set(key, diagram);
+  });
+  if (sheetNames.some((sheetName) => !matchingBySheet.has(diagramMatchKey(sheetName)))) return null;
+
+  const { linebookSheetName, nodes: linebookNodes } = workbookLinebookNodes(workbook);
+  return sheetNames.map((sheetName) => {
+    const stored = matchingBySheet.get(diagramMatchKey(sheetName));
+    const nodeName = linebookNodes.find((node) => diagramMatchKey(node) === diagramMatchKey(sheetName)) || "";
+    return {
+      ...stored,
+      stationName,
+      fileName,
+      sheetName,
+      linebookSheetName,
+      nodeName,
+      nodeKey: diagramMatchKey(nodeName || sheetName),
+      drawingFingerprint,
+      reuseMetadataUnchanged: sameStationName(stored.stationName, stationName)
+        && String(stored.fileName || "") === String(fileName || "")
+        && String(stored.linebookSheetName || "") === String(linebookSheetName || "")
+        && String(stored.nodeName || "") === String(nodeName || ""),
+    };
+  });
+}
+
 async function parseB2CDiagrams(workbook, stationName, fileName, file) {
   const { linebookSheetName, nodes: linebookNodes } = workbookLinebookNodes(workbook);
-  const nodeNamesBySheet = new Map(linebookNodes.map((node) => [diagramMatchKey(node), node]));
-  const presetDiagrams = await buildPresetLineDiagrams(stationName, fileName, nodeNamesBySheet);
-  if (presetDiagrams) return presetDiagrams;
-
   const diagrams = [];
   const excelRenderedImages = await excelRenderedLineDiagramImages(file);
-  const diagramSheetNames = workbook.SheetNames.filter((name) => !/선번장|우선순위|^>>$/i.test(name.trim()));
-  const needsBrowserFallback = diagramSheetNames.some((sheetName) => !excelRenderedImages.has(diagramMatchKey(sheetName)));
-  let zip = null;
-  let sheetPaths = {};
-  if (needsBrowserFallback) {
-    try {
-      if (window.JSZip && file) {
-        zip = await JSZip.loadAsync(file);
-      } else {
-        zip = workbookZipAdapter(workbook);
-      }
-      if (zip) sheetPaths = await workbookSheetPathMap(zip);
-    } catch (error) {
-      console.warn("엑셀 그림 추출 준비 실패", error);
-    }
+  const diagramSheetNames = lineDiagramSheetNames(workbook);
+  const missingSheetNames = diagramSheetNames.filter((sheetName) => !excelRenderedImages.has(diagramMatchKey(sheetName)));
+  if (missingSheetNames.length) {
+    throw new Error(`Excel 원본 이미지가 생성되지 않은 직선도 시트가 있습니다: ${missingSheetNames.join(", ")}`);
   }
 
   for (const sheetName of diagramSheetNames) {
-      const rawSheet = workbook.Sheets[sheetName];
-      if (!rawSheet) continue;
-      const sheetKey = diagramMatchKey(sheetName);
-      const nodeName = linebookNodes.find((node) => diagramMatchKey(node) === sheetKey) || "";
-      const excelRenderedImage = excelRenderedImages.get(sheetKey);
-      if (excelRenderedImage) {
-        diagrams.push({
-          stationName,
-          fileName,
-          sheetName,
-          linebookSheetName,
-          nodeName,
-          nodeKey: diagramMatchKey(nodeName || sheetName),
-          type: "image-map",
-          content: excelRenderedImage.content,
-          searchTargets: excelRenderedImage.searchTargets || [],
-          baseWidth: excelRenderedImage.baseWidth,
-          baseHeight: excelRenderedImage.baseHeight,
-          imageFormat: excelRenderedImage.imageFormat,
-          renderer: excelRenderedImage.renderer,
-        });
-        continue;
-      }
-      const drawingDiagram = zip && sheetPaths[sheetName]
-        ? await extractSheetDrawingDiagram(zip, sheetPaths[sheetName])
-        : null;
-      if (drawingDiagram) {
-        const imageAsset = await drawingDiagramToImageAsset(drawingDiagram);
-        diagrams.push({
-          stationName,
-          fileName,
-          sheetName,
-          linebookSheetName,
-          nodeName,
-          nodeKey: diagramMatchKey(nodeName || sheetName),
-          type: "image-map",
-          content: imageAsset.content,
-          searchTargets: imageAsset.searchTargets || [],
-          baseWidth: imageAsset.baseWidth,
-          baseHeight: imageAsset.baseHeight,
-          imageFormat: imageAsset.imageFormat,
-          renderer: "browser-svg",
-          shapeCount: drawingDiagram.shapeCount,
-          imageCount: drawingDiagram.pictureCount,
-        });
-        continue;
-      }
-      if (!/직선도/i.test(sheetName)) continue;
-      const images = zip && sheetPaths[sheetName] ? await extractSheetImages(zip, sheetPaths[sheetName]) : [];
-      if (images.length) {
-        diagrams.push({
-          stationName,
-          fileName,
-          sheetName,
-          linebookSheetName,
-          nodeName,
-          nodeKey: diagramMatchKey(nodeName || sheetName),
-          type: "image",
-          content: images[0].dataUrl,
-          searchTargets: [],
-          imageCount: images.length,
-        });
-        continue;
-      }
-      const sheet = restoreStyledEmptyCells(rawSheet, workbook, sheetName);
-      diagrams.push({
-        stationName,
-        fileName,
-        sheetName,
-        linebookSheetName,
-        nodeName,
-        nodeKey: diagramMatchKey(nodeName || sheetName),
-        type: "excel",
-        content: excelPlanHtml(sheet, workbook),
-      });
+    const sheetKey = diagramMatchKey(sheetName);
+    const nodeName = linebookNodes.find((node) => diagramMatchKey(node) === sheetKey) || "";
+    const excelRenderedImage = excelRenderedImages.get(sheetKey);
+    const imageFormat = String(excelRenderedImage.imageFormat || "").toLowerCase();
+    diagrams.push({
+      stationName,
+      fileName,
+      sheetName,
+      linebookSheetName,
+      nodeName,
+      nodeKey: diagramMatchKey(nodeName || sheetName),
+      type: imageFormat === "pdf" ? "pdf-map" : "image-map",
+      content: excelRenderedImage.content,
+      searchTargets: excelRenderedImage.searchTargets || [],
+      baseWidth: excelRenderedImage.baseWidth,
+      baseHeight: excelRenderedImage.baseHeight,
+      imageFormat: excelRenderedImage.imageFormat,
+      renderer: excelRenderedImage.renderer,
+    });
   }
   return diagrams;
 }
@@ -4056,18 +4319,48 @@ async function saveB2CFile() {
         ? { type: "array", cellDates: false, bookFiles: true }
         : { type: "array", cellStyles: true, cellNF: true, cellText: true, cellDates: false, sheetStubs: true, bookFiles: true };
       const workbook = XLSX.read(event.target.result, workbookOptions);
-      const sourceId = createDbSourceId("b2c");
+      const drawingFingerprint = await workbookDrawingFingerprint(workbook);
       const createdAt = new Date().toISOString();
+      const reusableDiagrams = await reusableExactLineDiagrams(
+        workbook,
+        stationName,
+        file.name,
+        drawingFingerprint,
+      );
+      const reusedExactImages = Boolean(reusableDiagrams);
+      let presetDiagrams = null;
+      if (!reusableDiagrams && presetLineDiagramConfig(file.name)) {
+        const { nodes: linebookNodes } = workbookLinebookNodes(workbook);
+        const nodeNamesBySheet = new Map(lineDiagramSheetNames(workbook).map((sheetName) => [
+          diagramMatchKey(sheetName),
+          linebookNodes.find((node) => diagramMatchKey(node) === diagramMatchKey(sheetName)) || "",
+        ]));
+        presetDiagrams = await buildPresetLineDiagrams(stationName, file.name, nodeNamesBySheet, {
+          drawingFingerprint,
+        });
+      }
+      const diagramAssets = reusableDiagrams
+        || presetDiagrams
+        || await parseB2CDiagrams(workbook, stationName, file.name, file);
+      const reusableSourceIds = [...new Set((reusableDiagrams || []).map((diagram) => diagram.sourceId).filter(Boolean))];
+      const reuseStoredDiagramSource = Boolean(reusableDiagrams?.length)
+        && reusableSourceIds.length === 1
+        && reusableDiagrams.every((diagram) => diagram.reuseMetadataUnchanged);
+      const sourceId = reuseStoredDiagramSource ? reusableSourceIds[0] : createDbSourceId("b2c");
       const parsedRows = parseB2CWorkbook(workbook, stationName, file.name).map((row) => ({
         ...row,
         sourceId,
         createdAt,
       }));
-      const parsedDiagrams = (await parseB2CDiagrams(workbook, stationName, file.name, file)).map((diagram) => ({
-        ...diagram,
-        sourceId,
-        createdAt,
-      }));
+      const parsedDiagrams = diagramAssets.map((diagram) => {
+        const { reuseMetadataUnchanged, ...storedDiagram } = diagram;
+        return {
+          ...storedDiagram,
+          sourceId,
+          createdAt,
+          drawingFingerprint,
+        };
+      });
       if (!parsedRows.length) throw new Error("Q~V열 검색 항목이 있는 전용선 데이터를 찾지 못했습니다.");
 
       localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
@@ -4078,12 +4371,15 @@ async function saveB2CFile() {
       ));
       const previousSourceIds = [...new Set(replacedLines.map((line) => line.sourceId).filter(Boolean))];
       const remainingLines = existingLines.filter((line) => !replacedLines.includes(line));
-      if (!previousSourceIds.length) {
+      if (!previousSourceIds.length && !reuseStoredDiagramSource) {
         await deleteB2CDiagramsForSource({ stationName, fileName: file.name });
       }
-      await saveB2CDiagramsForStation(stationName, parsedDiagrams, sourceId);
-      saveB2CLines([...remainingLines, ...parsedRows]);
+      if (!reuseStoredDiagramSource) {
+        await saveB2CDiagramsForStation(stationName, parsedDiagrams, sourceId);
+      }
+      await saveB2CLines([...remainingLines, ...parsedRows]);
       for (const previousSourceId of previousSourceIds) {
+        if (previousSourceId === sourceId) continue;
         try {
           await deleteB2CDiagramsForSource({ sourceId: previousSourceId });
         } catch (error) {
@@ -4094,7 +4390,7 @@ async function saveB2CFile() {
       fileInput.value = "";
       renderB2CAdmin();
       const indexedTargetCount = parsedDiagrams.reduce((sum, diagram) => sum + (diagram.searchTargets?.length || 0), 0);
-      showMessage(`${stationName} 선번장(직선도) DB ${parsedRows.length}건, 그림 직선도 ${parsedDiagrams.length}개, 셀/B2C 검색영역 ${indexedTargetCount}개 등록이 완료되었습니다.`);
+      showMessage(`${stationName} 선번장(직선도) DB ${parsedRows.length}건, 그림 직선도 ${parsedDiagrams.length}개, 셀/B2C 검색영역 ${indexedTargetCount}개 등록이 완료되었습니다.${reusedExactImages ? " 기존 고해상도 직선도 이미지를 재사용해 변환 시간을 단축했습니다." : ""}`);
     } catch (error) {
       console.error("선번장(직선도) DB 업로드 실패", error);
       showMessage(`선번장(직선도) DB 등록에 실패했습니다: ${error.message || "엑셀 양식을 확인해주세요."}`, true);
@@ -4358,7 +4654,8 @@ function applyRegisteredFloorPlan(record, location, equipmentName, targetText = 
   const floorPlan = qs("#rackPanel .floor-plan");
   if (!floorPlan) return;
   if (!plan) {
-    floorPlan.insertAdjacentHTML("afterbegin", `<p class="uploaded-rack-warning">${escapeHtml(record.stationName)}와 일치하는 등록 평면도가 없습니다. 관리자 화면에서 국사명 또는 엑셀 파일명을 확인해주세요.</p>`);
+    floorPlan.classList.add("uploaded-floor-plan", "floor-plan-empty-result");
+    floorPlan.innerHTML = '<p class="uploaded-rack-warning">' + escapeHtml(record.stationName) + '\uC640(\uACFC) \uC77C\uCE58\uD558\uB294 \uB4F1\uB85D \uD3C9\uBA74\uB3C4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.</p>';
     return;
   }
   floorPlan.classList.add("uploaded-floor-plan");
@@ -4377,6 +4674,9 @@ function applyRegisteredFloorPlan(record, location, equipmentName, targetText = 
     initFloorPlanTouchZoom(floorPlan);
     return;
   }
+  floorPlan.classList.add("floor-plan-empty-result");
+  floorPlan.innerHTML = '<p class="uploaded-rack-warning">\uD604\uC7AC \uD3C9\uBA74\uB3C4\uB294 JPG \uC5C5\uB85C\uB4DC \uD540 \uC9C0\uC815 \uBC29\uC2DD\uB9CC \uD45C\uC2DC\uD569\uB2C8\uB2E4.</p>';
+  return;
   floorPlan.innerHTML = `<div class="uploaded-excel-plan">${plan.content}</div>`;
   floorPlan.querySelectorAll(".excel-plan-cell").forEach((cell) => {
     if (!cell.textContent.trim() && /span\s+[2-9]/.test(cell.style.gridColumn) && /span\s+[2-9]/.test(cell.style.gridRow)) cell.classList.add("bordered");
@@ -5411,8 +5711,10 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
   } catch (error) {
     console.error("B2C 직선도 조회 실패", error);
   }
-  const legacyBlackDiagram = diagram?.renderer === "browser-svg" || diagram?.imageFormat === "svg";
-  if (legacyBlackDiagram) diagram = null;
+  const inaccurateBrowserDiagram = Boolean(diagram)
+    && (String(diagram.imageFormat || "").toLowerCase() === "svg"
+      || String(diagram.renderer || "").startsWith("browser-svg"));
+  if (inaccurateBrowserDiagram) diagram = null;
   const tokens = recordLineDiagramTokens(record, preferredText);
   qs("#rackView .topbar span").textContent = "직선도";
 
@@ -5423,9 +5725,11 @@ async function renderHfcLineDiagram(record, type, preferredText = "") {
           <div><span>직선도</span><h1>${escapeHtml(label)} 직선도</h1></div>
           <dl class="rack-meta"><div><dt>국사</dt><dd>${escapeHtml(record.stationName || "-")}</dd></div></dl>
         </div>
-        <p class="uploaded-rack-warning">${preferredText
-          ? `입력한 “${escapeHtml(preferredText)}”과(와) 공백·기호 제외 6글자 연속 일치하는 검색 글자를 해당 국사의 직선도에서 찾지 못했습니다.`
-          : "등록된 B2C 직선도가 없거나 이전 검은 화면 형식입니다. 관리자 화면에서 해당 국사의 선번장(직선도) DB를 다시 업로드해주세요."}</p>
+        <p class="uploaded-rack-warning">${inaccurateBrowserDiagram
+          ? "기존 직선도는 브라우저가 도형을 재구성한 부정확한 형식이라 표시하지 않았습니다. 이 PC의 로컬 웹앱과 Excel을 실행한 상태에서 관리자 화면의 선번장(직선도) DB를 다시 등록해주세요."
+          : (preferredText
+            ? `입력한 “${escapeHtml(preferredText)}”과(와) 공백·기호 제외 6글자 연속 일치하는 검색 글자를 해당 국사의 직선도에서 찾지 못했습니다.`
+            : "등록된 직선도 이미지가 없거나 검색 위치가 생성되지 않았습니다. 관리자 화면에서 해당 국사의 선번장(직선도) DB를 다시 업로드해주세요.")}</p>
       </section>`;
     showView("rackView");
     return;
@@ -5767,7 +6071,7 @@ function clearFloorPlansDatabase() {
 
 async function clearB2CDatabase() {
   if (!confirm("등록된 선번장(직선도) DB와 직선도를 모두 삭제할까요?")) return;
-  saveB2CLines([]);
+  await saveB2CLines([]);
   localStorage.removeItem(STORAGE_KEYS.b2cDiagrams);
   try {
     await deleteAllB2CDiagrams();
@@ -5978,8 +6282,16 @@ function exportExcel(type) {
   }
 }
 
+function handleAppRouteBack() {
+  if (authenticatedUser && !qs("#userView").classList.contains("hidden") && window.location.hash !== "#result") {
+    const resultPanel = qs("#resultPanel");
+    if (resultPanel?.querySelector(".kt-field-screen, .search-match-panel")) showSearchScreen();
+  }
+}
+
 function bindEvents() {
   qs("#loginForm").addEventListener("submit", login);
+  qs("#togglePasswordBtn")?.addEventListener("click", togglePasswordVisibility);
   qs("#searchBackBtn").addEventListener("click", showSearchScreen);
   qs("#logoutBtn").addEventListener("click", logout);
   qs("#rackLogoutBtn").addEventListener("click", logout);
@@ -6019,11 +6331,15 @@ function bindEvents() {
   qs("#passwordResetForm").addEventListener("submit", resetManagedUserPassword);
   qs("#closeUserAccountDialogBtn").addEventListener("click", () => qs("#userAccountDialog").close());
   qs("#closePasswordResetDialogBtn").addEventListener("click", () => qs("#passwordResetDialog").close());
+  window.addEventListener("popstate", handleAppRouteBack);
 }
 
 async function initApp() {
   bindEvents();
+  restoreRememberedLoginId();
   installMobileBackHandler();
+  registerPwaServiceWorker();
+  await hydrateB2CLines();
 
   authenticatedUser = await restoreSession();
   if (authenticatedUser) {
@@ -6031,14 +6347,13 @@ async function initApp() {
     if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
   }
   const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
-  if (authenticatedUser?.role === "admin") {
-    if (!requestedAdmin) window.history.replaceState(null, "", "/admin");
+  if (authenticatedUser?.role === "admin" && requestedAdmin) {
     showView("adminView");
     window.requestAnimationFrame(() => renderAdmin());
     return;
   }
 
-  if (authenticatedUser?.role === "user") {
+  if (authenticatedUser?.role === "user" || authenticatedUser?.role === "admin") {
     if (requestedAdmin || window.location.pathname !== "/") window.history.replaceState(null, "", "/");
     showSearchScreen();
     return;
@@ -6049,6 +6364,18 @@ async function initApp() {
   if (requestedAdmin || authReason === "admin-required") {
     qs("#loginMessage").textContent = "관리자 페이지에 접근하려면 관리자 로그인이 필요합니다.";
   }
+}
+
+function registerPwaServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  const isSecureHost = window.location.protocol === "https:"
+    || ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  if (!isSecureHost) return;
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((error) => {
+      console.warn("PWA service worker registration failed.", error);
+    });
+  }, { once: true });
 }
 
 initApp();

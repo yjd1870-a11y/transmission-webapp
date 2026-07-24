@@ -6,6 +6,7 @@ import { dirname, extname, join, normalize, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
+import { gzip as gzipCallback } from "node:zlib";
 import {
   bootstrapNeon,
   createPendingPhoto,
@@ -32,7 +33,8 @@ const root = process.cwd();
 const port = Number(process.env.PORT || 8000);
 const host = process.env.HOST || "127.0.0.1";
 const apiVersion = "neon-r2-v2";
-const lineDiagramCacheVersion = "excel-picture-v7-mapyeong-colored-text";
+const lineDiagramCacheVersion = "excel-picture-v8-exact-image-only";
+const staticAssetVersion = "catv0724-reference-ui-v17";
 const lineDiagramCacheDir = join(root, ".cache", "line-diagram-images");
 const lineDiagramJobs = new Map();
 const authSessions = new Map();
@@ -48,6 +50,7 @@ const sharedDatabasePath = process.env.RATIS_SHARED_DB_PATH
   ? resolve(process.env.RATIS_SHARED_DB_PATH)
   : join(root, "assets", "shared-db.json");
 const scryptAsync = promisify(scryptCallback);
+const gzipAsync = promisify(gzipCallback);
 let authDatabaseWriteQueue = Promise.resolve();
 let persistentStorageBootstrapPromise;
 
@@ -60,7 +63,11 @@ const types = {
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
   ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".svg": "image/svg+xml; charset=utf-8",
   ".pdf": "application/pdf",
 };
 
@@ -68,7 +75,7 @@ function applySecurityHeaders(request, response) {
   response.setHeader("content-security-policy", [
     "default-src 'self'",
     "base-uri 'self'",
-    "connect-src 'self' https://api.github.com https://*.r2.cloudflarestorage.com",
+    "connect-src 'self' http://127.0.0.1:8000 http://localhost:8000 https://api.github.com https://*.r2.cloudflarestorage.com",
     "font-src 'self' data:",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -230,6 +237,32 @@ async function readFileAuthAccounts() {
     await writeFileAuthAccounts(initialUsers);
     return initialUsers;
   }
+}
+
+function trustedLineDiagramRendererOrigin(request) {
+  const origin = String(request.headers.origin || "").trim();
+  if (!origin) return "";
+  if (origin === "https://transmission-webapp.vercel.app") return origin;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol !== "https:") return "";
+    if (hostname === "transmission-webapp-yjd1870-4600s-projects.vercel.app") return origin;
+    if (/^transmission-webapp-[a-z0-9-]+-yjd1870-4600s-projects\.vercel\.app$/i.test(hostname)) return origin;
+  } catch {}
+  return "";
+}
+
+function applyLineDiagramRendererCors(request, response) {
+  const origin = trustedLineDiagramRendererOrigin(request);
+  if (!origin) return "";
+  response.setHeader("access-control-allow-origin", origin);
+  response.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
+  response.setHeader("access-control-allow-headers", "content-type, x-file-name, x-line-diagram-output");
+  response.setHeader("access-control-allow-private-network", "true");
+  response.setHeader("access-control-max-age", "600");
+  response.setHeader("cross-origin-resource-policy", "cross-origin");
+  response.setHeader("vary", "Origin");
+  return origin;
 }
 
 async function writeFileAuthAccounts(users) {
@@ -752,8 +785,29 @@ async function handleDeletePhoto(response, photoId) {
 
 function isPublicStaticPath(pathname) {
   if (pathname.includes("\\") || pathname.split("/").includes("..")) return false;
-  if (["/index.html", "/app.js", "/styles.css", "/favicon.ico"].includes(pathname)) return true;
+  if ([
+    "/index.html",
+    "/local-redirect.js",
+    "/app.js",
+    "/styles.css",
+    "/favicon.ico",
+    "/manifest.webmanifest",
+    "/sw.js",
+  ].includes(pathname)) return true;
   return pathname.startsWith("/assets/");
+}
+
+function isPublicUnauthenticatedStaticPath(pathname) {
+  if ([
+    "/assets/catv-network-bg.svg",
+    "/assets/catv-network-bg.jpg",
+    "/assets/catv-network-bg.png",
+    "/assets/catv-app-icon.svg",
+    "/assets/catv-topbar-symbol.png",
+    "/assets/icons/icon-192.png",
+    "/assets/icons/icon-512.png",
+  ].includes(pathname)) return true;
+  return false;
 }
 
 function collectRequestBody(request, limitBytes = 80 * 1024 * 1024) {
@@ -805,7 +859,11 @@ function pngSize(buffer) {
   };
 }
 
-async function renderLineDiagramImages(body) {
+function normalizeLineDiagramOutputFormat(value) {
+  return String(value || "").toLowerCase() === "pdf" ? "PDF" : "PNG";
+}
+
+async function renderLineDiagramImages(body, options = {}) {
   const tempDir = await mkdtemp(join(tmpdir(), "catv-line-diagram-"));
   try {
     const inputPath = join(tempDir, "workbook.xlsx");
@@ -813,7 +871,15 @@ async function renderLineDiagramImages(body) {
     await writeFile(inputPath, body);
 
     const scriptPath = join(root, "tools", "export-line-diagram-images.ps1");
-    const output = await runPowerShell(scriptPath, ["-InputPath", inputPath, "-OutputDir", outputDir]);
+    const outputFormat = normalizeLineDiagramOutputFormat(options.outputFormat);
+    const output = await runPowerShell(scriptPath, [
+      "-InputPath",
+      inputPath,
+      "-OutputDir",
+      outputDir,
+      "-OutputFormat",
+      outputFormat,
+    ]);
     const parsed = JSON.parse(output || "[]");
     const rows = Array.isArray(parsed) ? parsed : [parsed];
     const sheets = [];
@@ -821,11 +887,13 @@ async function renderLineDiagramImages(body) {
       if (!row?.fileName) continue;
       const image = await readFile(join(outputDir, row.fileName));
       const { width, height } = pngSize(image);
+      const imageFormat = String(row.imageFormat || extname(row.fileName).slice(1) || "png").toLowerCase();
       sheets.push({
         sheetName: row.sheetName || "",
-        width,
-        height,
+        width: Number(row.widthPixels || row.width || width) || 0,
+        height: Number(row.heightPixels || row.height || height) || 0,
         content: image.toString("base64"),
+        imageFormat,
         searchTargets: Array.isArray(row.searchTargets) ? row.searchTargets : [],
       });
     }
@@ -836,12 +904,39 @@ async function renderLineDiagramImages(body) {
   }
 }
 
+async function sendLineDiagramJson(request, response, serialized, cacheStatus) {
+  const acceptsGzip = /\bgzip\b/i.test(String(request.headers["accept-encoding"] || ""));
+  const headers = {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store",
+    "x-line-diagram-cache": cacheStatus,
+    "vary": "Origin, Accept-Encoding",
+  };
+  if (acceptsGzip && Buffer.byteLength(serialized) >= 64 * 1024) {
+    const compressed = await gzipAsync(Buffer.from(serialized), { level: 1 });
+    response.writeHead(200, {
+      ...headers,
+      "content-encoding": "gzip",
+      "content-length": compressed.length,
+    });
+    response.end(compressed);
+    return;
+  }
+  response.writeHead(200, {
+    ...headers,
+    "content-length": Buffer.byteLength(serialized),
+  });
+  response.end(serialized);
+}
+
 async function handleLineDiagramImages(request, response) {
   const startedAt = Date.now();
   try {
     const body = await collectRequestBody(request);
+    const outputFormat = normalizeLineDiagramOutputFormat(request.headers["x-line-diagram-output"]);
     const cacheKey = createHash("sha256")
       .update(lineDiagramCacheVersion)
+      .update(outputFormat)
       .update(body)
       .digest("hex");
     await mkdir(lineDiagramCacheDir, { recursive: true });
@@ -850,18 +945,14 @@ async function handleLineDiagramImages(request, response) {
     const cached = await readFile(cachePath, "utf8").catch(() => "");
     if (cached) {
       console.log(`[line-diagram] cache hit ${cacheKey.slice(0, 12)} in ${Date.now() - startedAt}ms`);
-      response.writeHead(200, {
-        "content-type": "application/json; charset=utf-8",
-        "x-line-diagram-cache": "HIT",
-      });
-      response.end(cached);
+      await sendLineDiagramJson(request, response, cached, "HIT");
       return;
     }
 
     let job = lineDiagramJobs.get(cacheKey);
     const joinedExistingJob = Boolean(job);
     if (!job) {
-      job = renderLineDiagramImages(body)
+      job = renderLineDiagramImages(body, { outputFormat })
         .then(async (payload) => {
           const serialized = JSON.stringify(payload);
           await writeFile(cachePath, serialized, "utf8").catch((error) => {
@@ -875,11 +966,7 @@ async function handleLineDiagramImages(request, response) {
 
     const serialized = await job;
     console.log(`[line-diagram] ${joinedExistingJob ? "joined" : "rendered"} ${cacheKey.slice(0, 12)} in ${Date.now() - startedAt}ms`);
-    response.writeHead(200, {
-      "content-type": "application/json; charset=utf-8",
-      "x-line-diagram-cache": joinedExistingJob ? "JOINED" : "MISS",
-    });
-    response.end(serialized);
+    await sendLineDiagramJson(request, response, serialized, joinedExistingJob ? "JOINED" : "MISS");
   } catch (error) {
     console.error("Line diagram image export failed:", error);
     response.writeHead(500, { "content-type": "application/json; charset=utf-8" });
@@ -890,7 +977,16 @@ async function handleLineDiagramImages(request, response) {
 async function handleRequest(request, response) {
   applySecurityHeaders(request, response);
   const url = new URL(request.url || "/", `http://${host}:${port}`);
-  if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method || "") && rejectCrossSiteMutation(request, response)) {
+  const isLocalRendererRoute = ["/api/health", "/api/line-diagram-images"].includes(url.pathname);
+  const rendererOrigin = isLocalRendererRoute ? applyLineDiagramRendererCors(request, response) : "";
+  if (request.method === "OPTIONS" && isLocalRendererRoute && rendererOrigin) {
+    response.writeHead(204, { "cache-control": "no-store" });
+    response.end();
+    return;
+  }
+  if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method || "")
+    && !rendererOrigin
+    && rejectCrossSiteMutation(request, response)) {
     return;
   }
   if (request.method === "POST" && url.pathname === "/api/auth/login") {
@@ -969,6 +1065,8 @@ async function handleRequest(request, response) {
     response.end(JSON.stringify({
       ok: true,
       apiVersion,
+      lineDiagramRendererVersion: lineDiagramCacheVersion,
+      staticAssetVersion,
       authConfigured: Boolean(adminAccountFromEnvironment()),
       database: neonConfigured() ? "neon" : "file",
       photoStorage: neonConfigured() && r2Configured() ? "r2" : "disabled",
@@ -983,7 +1081,7 @@ async function handleRequest(request, response) {
     return;
   }
   if (request.method === "POST" && url.pathname === "/api/line-diagram-images") {
-    if (!requireAdmin(request, response)) return;
+    if (!rendererOrigin && !requireAdmin(request, response)) return;
     await handleLineDiagramImages(request, response);
     return;
   }
@@ -1011,7 +1109,9 @@ async function handleRequest(request, response) {
     sendJson(response, 400, { error: "잘못된 요청 경로입니다." });
     return;
   }
-  if (pathname.startsWith("/assets/") && !requireSession(request, response)) return;
+  if (pathname.startsWith("/assets/")
+    && !isPublicUnauthenticatedStaticPath(pathname)
+    && !requireSession(request, response)) return;
   if (!isPublicStaticPath(pathname)) {
     response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
     response.end("Not found");

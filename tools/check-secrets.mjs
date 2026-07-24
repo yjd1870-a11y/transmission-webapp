@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 
 const mode = process.argv.includes("--history") ? "history" : "staged";
 const sensitivePath = /(^|\/)(\.env($|\.)|[^/]+\.(?:pem|key|p12|pfx|jks|keystore)$|credentials[^/]*\.json$|secrets?[^/]*\.(?:json|ya?ml)$|\.npmrc$|\.pypirc$)/i;
+const allowedTemplatePath = /(^|\/)\.env\.example$/i;
 const ignoredPaths = [
   /^assets\/vendor\//,
   /^tools\/check-secrets\.mjs$/,
@@ -60,7 +61,7 @@ function scanStaged() {
 
   for (const path of names) {
     if (ignored(path)) continue;
-    if (sensitivePath.test(path)) {
+    if (sensitivePath.test(path) && !allowedTemplatePath.test(path)) {
       findings.push({ path, line: 1, rule: "sensitive-filename" });
       continue;
     }
@@ -86,7 +87,7 @@ function scanHistory() {
       .split("\0")
       .filter(Boolean);
     for (const path of names) {
-      if (!ignored(path) && sensitivePath.test(path)) {
+      if (!ignored(path) && sensitivePath.test(path) && !allowedTemplatePath.test(path)) {
         findings.set(`${commit}:${path}:sensitive-filename`, { commit, path, line: 1, rule: "sensitive-filename" });
       }
     }

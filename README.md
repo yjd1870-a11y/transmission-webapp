@@ -26,12 +26,20 @@
 
 - 루트의 `render.yaml`은 Render Starter 웹 서비스와 1GB 영구 디스크를 생성합니다.
 - `RATIS_MASTER_KEY`는 Blueprint 생성 화면에서만 직접 입력하며 GitHub 변수, 소스, `.env`에는 저장하지 않습니다.
-- 계정 해시는 영구 디스크의 `/var/data/auth-users.json`에 저장됩니다.
-- 배포 상태 확인 주소는 `/api/health`이며 `apiVersion`이 `managed-auth-v1`이어야 합니다.
+- 운영 계정·공유 DB 메타데이터는 Vercel에 연결한 Neon DB의 `DATABASE_URL`을 통해 저장됩니다.
+- 현장 사진 파일은 비공개 Cloudflare R2 버킷에 저장되고, 메타데이터만 Neon DB에 저장됩니다.
+- 배포 상태 확인 주소는 `/api/health`이며 `apiVersion`이 `neon-r2-v2`, `database`가 `neon`이어야 합니다.
 - 사용자 운영 주소는 Vercel의 `https://transmission-webapp.vercel.app/`입니다.
 - Vercel에는 로그인 공개 셸만 배포하고 `/api`와 보호된 `/assets` 요청은 Render 백엔드로 전달합니다.
 - Render 백엔드 주소는 `https://ratis-transmission-webapp-yjd1870.onrender.com/`이며 공유 DB와 도면 자산은 로그인 세션 없이는 제공하지 않습니다.
 - GitHub Pages 주소는 정적 인증 화면을 제공하지 않고 Vercel 운영 주소로 이동합니다.
+
+### 모바일 홈 화면에 PWA로 설치
+
+- Android Chrome에서는 운영 주소를 연 뒤 메뉴의 `앱 설치` 또는 `홈 화면에 추가`를 선택합니다.
+- iPhone Safari에서는 공유 버튼을 누른 뒤 `홈 화면에 추가`를 선택합니다.
+- 설치 후에는 바탕화면의 `CATV 조회` 아이콘으로 전체 화면 앱처럼 실행할 수 있습니다.
+- 로그인, DB 조회, 사진 기능은 운영 API가 필요하므로 인터넷 연결이 필요합니다. 서비스 워커는 로그인 화면과 공개 UI 자산만 안전하게 캐시합니다.
 
 ## 주요 기능
 
