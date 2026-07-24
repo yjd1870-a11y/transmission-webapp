@@ -1,4 +1,4 @@
-const CACHE_NAME = "catv-pwa-role-sync-v20";
+const CACHE_NAME = "catv-pwa-fresh-login-v21";
 const APP_SHELL = [
   "/",
   "/index.html",

@@ -8,7 +8,7 @@ const STORAGE_KEYS = {
   sharedDbDirty: "catvSharedDbDirty",
 };
 
-const APP_VERSION = "CATV0724-ROLE-SYNC";
+const APP_VERSION = "CATV0724-FRESH-LOGIN";
 const LINE_DIAGRAM_RENDERER_VERSION = "excel-picture-v8-exact-image-only";
 const SHARED_DB_PATH = "/assets/shared-db.json";
 const GITHUB_SHARED_DB_REPO = "yjd1870-a11y/transmission-webapp";
@@ -19,6 +19,7 @@ let sharedDbSaveInFlight = false;
 let sharedDbSaveQueued = false;
 let sharedDbChangeSequence = 0;
 let userDbRefreshPromise = null;
+let initialSessionResetPromise = Promise.resolve();
 let mobileExitBackAt = 0;
 let mobileExitBackTimer = null;
 let activePhotoLightboxClose = null;
@@ -889,14 +890,15 @@ async function requestLogin(id, password) {
   return { response, result };
 }
 
-async function restoreSession() {
+async function resetExistingSession() {
   try {
-    const response = await fetch("/api/auth/session", { cache: "no-store", credentials: "same-origin" });
-    if (!response.ok) return null;
-    const result = await response.json();
-    return result?.authenticated && ["user", "admin"].includes(result?.user?.role) ? result.user : null;
+    await fetch("/api/auth/logout", {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+    });
   } catch (error) {
-    return null;
+    console.warn("기존 로그인 세션을 정리하지 못했습니다.", error);
   }
 }
 
@@ -936,6 +938,7 @@ async function login(event) {
   submitButton.disabled = true;
 
   try {
+    await initialSessionResetPromise;
     const { response, result } = await requestLogin(id, password);
     if (response.ok && result?.authenticated && ["user", "admin"].includes(result?.user?.role)) {
       authenticatedUser = result.user;
@@ -6426,16 +6429,11 @@ async function initApp() {
   restoreRememberedLoginId();
   installMobileBackHandler();
   registerPwaServiceWorker();
+  authenticatedUser = null;
+  initialSessionResetPromise = resetExistingSession();
   await hydrateB2CLines();
 
-  authenticatedUser = await restoreSession();
-  if (authenticatedUser) {
-    const sharedDatabaseLoaded = await loadSharedDatabaseFromSite();
-    if (sharedDatabaseLoaded || localStorage.getItem(STORAGE_KEYS.records)) ensureSeedData();
-  }
   const requestedAdmin = ["/admin", "/admin/"].includes(window.location.pathname);
-  if (showAuthenticatedHome()) return;
-
   showView("loginView");
   const authReason = new URLSearchParams(window.location.search).get("auth");
   if (requestedAdmin || authReason === "admin-required") {
