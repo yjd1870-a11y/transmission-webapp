@@ -2989,6 +2989,2044 @@ td input {
   transform-origin: 0 0;
 }
 
+/* CATV 2026 visual theme and PWA-ready responsive layout. */
+:root {
+  --catv-navy: #071a3d;
+  --catv-blue: #0b5cff;
+  --catv-blue-deep: #063aa7;
+  --catv-sky: #7dbbff;
+  --catv-orange: #ff4b12;
+  --catv-ink: #06153a;
+  --catv-line: #a9c4ee;
+  --catv-glass: rgba(255, 255, 255, .92);
+  --catv-glass-soft: rgba(255, 255, 255, .82);
+  --catv-shadow: 0 0 0 1px rgba(179, 209, 255, .82), 0 18px 46px rgba(0, 35, 112, .34), inset 0 1px 0 rgba(255, 255, 255, .86);
+}
+
+html {
+  min-height: 100%;
+  background: #020b20;
+}
+
+body {
+  color: var(--catv-ink);
+  background:
+    radial-gradient(circle at 76% 4%, rgba(49, 139, 255, .38), transparent 28rem),
+    radial-gradient(circle at 4% 78%, rgba(11, 92, 255, .32), transparent 24rem),
+    linear-gradient(135deg, rgba(2, 9, 30, .96), rgba(4, 25, 64, .94)),
+    url("assets/catv-network-bg.svg") center / cover fixed;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .08), transparent 24%, transparent 76%, rgba(0, 0, 0, .1));
+}
+
+.app-shell,
+#userView,
+#rackView,
+#adminView {
+  min-height: 100dvh;
+  background: transparent !important;
+}
+
+.login-view {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr;
+  place-items: center;
+  min-height: 100dvh;
+  padding: clamp(18px, 4vw, 48px);
+}
+
+.login-view .brand-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.login-view .brand-panel > * {
+  display: none;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: min(520px, calc(100vw - 32px));
+  margin: 0;
+  padding: clamp(30px, 4vw, 46px) clamp(24px, 4vw, 48px);
+  border: 1px solid rgba(201, 222, 255, .92);
+  border-radius: 16px;
+  color: var(--catv-ink);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(239, 245, 255, .91));
+  box-shadow: var(--catv-shadow);
+  backdrop-filter: blur(12px);
+}
+
+.login-card::before {
+  content: "";
+  display: block;
+  width: 92px;
+  height: 92px;
+  margin: 0 auto 20px;
+  background: url("assets/catv-app-icon.svg") center / contain no-repeat;
+  filter: drop-shadow(0 8px 18px rgba(11, 92, 255, .28));
+}
+
+.login-card h2 {
+  margin: 0 0 28px;
+  color: transparent;
+  font-size: 0;
+  text-align: center;
+}
+
+.login-card h2::before {
+  content: "CATV 전송망 통합 조회";
+  display: block;
+  color: #050b1f;
+  font-size: clamp(28px, 3.5vw, 36px);
+  font-weight: 900;
+  line-height: 1.2;
+}
+
+.login-card h2::after {
+  content: "CELL 및 전용선을 조회하여 HFC와 국사 정보를 확인합니다.";
+  display: block;
+  max-width: 360px;
+  margin: 12px auto 0;
+  color: #1f4f9d;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+label,
+.login-card label {
+  color: #071a3d;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+input,
+select,
+textarea {
+  border-color: #aec3e8;
+  border-radius: 8px;
+  color: var(--catv-ink);
+  background: rgba(255, 255, 255, .82);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--catv-blue);
+  outline: 3px solid rgba(11, 92, 255, .18);
+}
+
+button,
+.primary-btn,
+.secondary-btn,
+.ghost-btn {
+  border-radius: 8px;
+}
+
+.primary-btn {
+  background: linear-gradient(180deg, #1974ff, #004be7);
+  box-shadow: 0 10px 22px rgba(0, 75, 231, .28);
+}
+
+.primary-btn:hover {
+  background: linear-gradient(180deg, #0e67ee, #003fc8);
+}
+
+.ghost-btn,
+.topbar .ghost-btn {
+  border: 1px solid #98b7eb;
+  color: #08245d;
+  background: rgba(255, 255, 255, .62);
+}
+
+.account-hint {
+  margin-top: 24px;
+  color: #244a8a;
+  text-align: center;
+}
+
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  position: sticky;
+  top: clamp(10px, 2vw, 28px);
+  z-index: 50;
+  width: min(1500px, calc(100% - clamp(24px, 5vw, 88px)));
+  margin: 0 auto clamp(22px, 3vw, 40px);
+  padding: clamp(14px, 2vw, 22px) clamp(18px, 3vw, 36px);
+  border: 1px solid rgba(196, 219, 255, .96);
+  border-radius: 14px;
+  color: var(--catv-ink);
+  background: linear-gradient(135deg, rgba(255, 255, 255, .96), rgba(236, 244, 255, .88));
+  box-shadow: var(--catv-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.topbar > div:first-child::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  background: url("assets/catv-app-icon.svg") center / contain no-repeat;
+}
+
+.topbar strong,
+#userView > .topbar strong,
+#rackView > .topbar strong,
+#adminView > .topbar strong {
+  color: var(--catv-ink);
+  font-size: clamp(24px, 3vw, 36px);
+  line-height: 1;
+}
+
+.topbar span,
+#userView > .topbar span,
+#rackView > .topbar span,
+#adminView > .topbar span {
+  color: #08245d;
+  font-size: clamp(15px, 1.4vw, 20px);
+  font-weight: 800;
+}
+
+.topbar button {
+  min-height: 48px;
+  padding-inline: 24px;
+}
+
+#userView,
+#rackView,
+#adminView {
+  padding: clamp(16px, 2vw, 30px) 0 clamp(28px, 4vw, 56px);
+}
+
+.query-panel {
+  width: min(1340px, calc(100% - clamp(28px, 10vw, 240px)));
+  max-width: none;
+  margin: 0 auto 28px;
+  padding: clamp(24px, 3vw, 36px);
+  border: 1px solid rgba(197, 219, 255, .95);
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(235, 243, 255, .86));
+  box-shadow: var(--catv-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.query-card {
+  gap: 16px;
+  padding: 26px;
+  border: 1px solid #b8cff5;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .54);
+}
+
+.query-card label span {
+  color: var(--catv-ink);
+  font-size: 19px;
+}
+
+.query-card input {
+  min-height: 60px;
+  padding-inline: 18px;
+  font-size: 18px;
+}
+
+.query-card .primary-btn {
+  min-width: 156px;
+  min-height: 60px;
+  font-size: 18px;
+}
+
+.network-sheet {
+  width: min(1320px, calc(100% - clamp(28px, 10vw, 240px)));
+  max-width: none;
+  min-height: 440px;
+  margin: 0 auto;
+  padding: clamp(28px, 3.5vw, 48px);
+  border: 1px solid rgba(195, 218, 255, .96);
+  border-radius: 14px;
+  color: var(--catv-ink);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .95), rgba(239, 246, 255, .88));
+  box-shadow: var(--catv-shadow);
+  backdrop-filter: blur(14px);
+}
+
+.empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 330px;
+  color: #08245d;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.empty-state::before {
+  content: "";
+  display: block;
+  width: 150px;
+  height: 150px;
+  margin-bottom: 18px;
+  opacity: .72;
+  background: url("assets/catv-app-icon.svg") center / contain no-repeat;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  width: min(1420px, calc(100% - clamp(28px, 8vw, 120px)));
+  max-width: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.kt-field-screen.field-record-sheet {
+  max-width: none;
+  padding: 0;
+  gap: 18px;
+  background: transparent;
+}
+
+.kt-info-card {
+  border: 1px solid #b6cff7;
+  border-radius: 12px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .97), rgba(244, 248, 255, .92));
+  box-shadow: var(--catv-shadow);
+}
+
+.kt-basic-card,
+.kt-station-card,
+.kt-hfc-card,
+.kt-remarks-card {
+  padding: clamp(22px, 2vw, 32px);
+}
+
+.kt-info-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  color: var(--catv-ink);
+  font-size: clamp(24px, 2vw, 30px);
+}
+
+.kt-info-card h2::before,
+.section-title::before {
+  content: "";
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #9ee0ff, #0b5cff 62%, #052d8d);
+  box-shadow: 0 0 12px rgba(11, 92, 255, .54);
+}
+
+.kt-basic-table,
+.kt-field-screen .field-table,
+.kt-device-info-table,
+.kt-field-screen .remarks-editor {
+  border: 1px solid #b3c9ee;
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .72);
+}
+
+.kt-field-screen .field-table-head span {
+  color: #fff;
+  background: linear-gradient(180deg, #0b66ff, #004bdc);
+  font-size: 17px;
+}
+
+.kt-field-screen .field-table span,
+.kt-field-screen .field-table button {
+  border-color: #bfd2f2;
+  color: var(--catv-ink);
+  font-size: 17px;
+}
+
+.kt-field-screen .field-table button,
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn,
+.b2c-remark-diagram-controls button {
+  border: 1px solid rgba(255, 92, 37, .88);
+  color: #ff3b12;
+  background: #fff;
+  box-shadow: none;
+}
+
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn,
+.b2c-remark-diagram-controls button {
+  color: #fff;
+  background: linear-gradient(180deg, #ff6b19, #f23408);
+  box-shadow: 0 10px 22px rgba(242, 52, 8, .24);
+}
+
+.kt-field-screen .field-table button:hover,
+.kt-diagram-btn.field-line-diagram-btn:hover,
+.kt-save-btn:hover {
+  background: linear-gradient(180deg, #ff5b12, #df2e06);
+  color: #fff;
+}
+
+.kt-hfc-panel {
+  gap: 18px;
+  padding: 0;
+  border: 1px solid #b3c9ee;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.kt-hfc-device {
+  padding: clamp(18px, 2vw, 26px);
+}
+
+.kt-hfc-device + .kt-hfc-device {
+  border-top: 1px solid #bfd2f2;
+}
+
+.kt-device-head strong {
+  color: var(--catv-ink);
+  font-size: 24px;
+}
+
+.kt-device-head .field-action {
+  min-height: 46px;
+  padding-inline: 24px;
+  border-color: var(--catv-orange);
+  color: var(--catv-orange);
+  font-size: 17px;
+}
+
+.kt-device-list div {
+  grid-template-columns: 140px minmax(0, 1fr) 140px minmax(0, 1fr);
+  min-height: 56px;
+  gap: 0;
+  border-top: 1px solid #bfd2f2;
+  font-size: 18px;
+}
+
+.kt-device-list div:first-child {
+  border-top: 0;
+}
+
+.kt-device-list dt,
+.kt-device-list dd,
+.kt-device-label,
+.kt-device-value {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 22px;
+}
+
+.kt-device-list dt,
+.kt-device-label {
+  justify-content: center;
+  border-right: 1px solid #bfd2f2;
+  background: rgba(238, 245, 255, .72);
+}
+
+.kt-device-list dd,
+.kt-device-value {
+  border-right: 1px solid #bfd2f2;
+}
+
+.kt-device-list dd:last-child,
+.kt-device-value:last-child {
+  border-right: 0;
+}
+
+.kt-field-screen .remarks-editor {
+  min-height: 190px;
+}
+
+.kt-field-screen .remarks-editor textarea {
+  min-height: 190px;
+  padding: 20px;
+  font-size: 18px;
+}
+
+.remarks-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 22px;
+  padding: 0 18px 14px;
+}
+
+.rack-page {
+  min-height: auto;
+  padding: 0;
+  background: transparent;
+}
+
+.rack-sheet {
+  width: min(1460px, calc(100% - clamp(28px, 7vw, 120px)));
+  max-width: none;
+  margin: 0 auto;
+  padding: clamp(26px, 3vw, 42px);
+  border: 1px solid rgba(195, 218, 255, .96);
+  border-radius: 14px;
+  color: var(--catv-ink);
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(244, 248, 255, .91));
+  box-shadow: var(--catv-shadow);
+}
+
+.rack-heading {
+  border-bottom: 1px solid #d4e0f4;
+}
+
+.rack-heading span {
+  color: #0b5cff;
+  font-size: 16px;
+}
+
+.rack-heading h1 {
+  color: #071a3d;
+  font-size: clamp(34px, 4vw, 50px);
+}
+
+.rack-meta {
+  border-color: #abc5ef;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.rack-meta div {
+  border-color: #abc5ef;
+}
+
+.rack-meta dt {
+  background: #eaf4ff;
+}
+
+.line-diagram-route {
+  border-color: #9fc0f3;
+  color: #0a3d98;
+  background: rgba(240, 247, 255, .86);
+}
+
+.line-diagram-zoom-toolbar {
+  border: 1px solid #bfd2f2;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .82);
+}
+
+.line-diagram-zoom-toolbar button {
+  border: 1px solid #adc9f7;
+  color: #063aa7;
+  background: #f7fbff;
+}
+
+.uploaded-floor-plan,
+.line-diagram-canvas,
+.pdf-line-diagram-canvas {
+  border: 1px solid #abc5ef;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.rack-diagram-sheet .floor-plan {
+  border-color: #abc5ef;
+  border-radius: 8px;
+}
+
+.rack-detail-header-btn,
+.field-line-diagram-btn {
+  min-height: 48px;
+  border-radius: 8px;
+}
+
+@media (max-width: 1024px) {
+  .query-panel,
+  .network-sheet,
+  .network-sheet:has(.kt-field-screen),
+  .rack-sheet,
+  .topbar,
+  #userView > .topbar,
+  #rackView > .topbar,
+  #adminView > .topbar {
+    width: calc(100% - 28px);
+  }
+
+  .split-query-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .query-card {
+    grid-template-columns: 1fr;
+  }
+
+  .query-card .primary-btn {
+    width: 100%;
+  }
+
+  .kt-device-list div {
+    grid-template-columns: 118px minmax(0, 1fr);
+  }
+
+  .kt-device-list dt,
+  .kt-device-label {
+    justify-content: flex-start;
+  }
+
+  .kt-device-list dd,
+  .kt-device-value {
+    border-right: 0;
+  }
+}
+
+/* CATV login/search reference tuning. Keep after prior CATV overrides. */
+html,
+body {
+  background-image:
+    radial-gradient(circle at 88% 9%, rgba(42, 134, 255, .26), transparent 23rem),
+    radial-gradient(circle at 8% 84%, rgba(36, 132, 255, .24), transparent 25rem),
+    linear-gradient(135deg, rgba(2, 10, 33, .5), rgba(5, 20, 57, .42)),
+    url("assets/catv-network-bg.svg") !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+body::after {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(circle at 91% 10%, rgba(35, 130, 255, .18), transparent 17rem),
+    radial-gradient(circle at 8% 86%, rgba(35, 130, 255, .16), transparent 19rem) !important;
+}
+
+.login-card,
+.query-panel,
+.network-sheet,
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .88), rgba(235, 242, 253, .76)) !important;
+  border-color: rgba(214, 232, 255, .96) !important;
+  box-shadow:
+    0 0 0 1px rgba(173, 206, 255, .86),
+    0 0 26px rgba(85, 162, 255, .22),
+    0 18px 44px rgba(0, 31, 91, .5),
+    inset 0 1px 0 rgba(255, 255, 255, .92) !important;
+  backdrop-filter: blur(18px) saturate(1.12) !important;
+}
+
+.login-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .9), rgba(236, 243, 254, .78)) !important;
+}
+
+#userView > .topbar > div:first-child {
+  gap: 20px !important;
+}
+
+#userView > .topbar > div:first-child::before {
+  width: 58px !important;
+  height: 58px !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 180'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='35' y1='8' x2='190' y2='165' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%236bd1ff'/%3E%3Cstop offset='.46' stop-color='%230b76ff'/%3E%3Cstop offset='1' stop-color='%23004be8'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeDropShadow dx='0' dy='8' stdDeviation='6' flood-color='%23003fae' flood-opacity='.35'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='%23035cff' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' opacity='.9'%3E%3Cpath d='M110 28 43 66v76l67 38 67-38V66z'/%3E%3Cpath d='M43 66l67 38 67-38M110 104v76'/%3E%3C/g%3E%3Cg filter='url(%23s)' stroke='%239ed8ff' stroke-width='4' stroke-linejoin='round'%3E%3Cpath d='M110 4 137 19v31l-27 16-27-16V19z' fill='url(%23g)'/%3E%3Cpath d='M46 91 73 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3Cpath d='M174 91 201 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+#userView > .topbar strong::after {
+  content: " 전송망 통합 조회" !important;
+}
+
+#userView > .topbar span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+}
+
+#userView > .topbar span::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 1px !important;
+  height: 34px !important;
+  background: rgba(6, 25, 70, .22) !important;
+}
+
+#logoutBtn::before,
+#rackLogoutBtn::before,
+#adminLogoutBtn::before {
+  content: "↪" !important;
+  margin-right: 10px !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+.query-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .74), rgba(239, 246, 255, .56)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .76) !important;
+}
+
+.query-card input {
+  background: rgba(255, 255, 255, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .82) !important;
+}
+
+.empty-state {
+  gap: 28px !important;
+  align-content: center !important;
+}
+
+.empty-state::before {
+  content: "" !important;
+  width: clamp(126px, 11vw, 176px) !important;
+  height: clamp(126px, 11vw, 176px) !important;
+  margin: 0 !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'%3E%3Cdefs%3E%3ClinearGradient id='w' x1='44' y1='30' x2='176' y2='188' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%238cc6ff'/%3E%3Cstop offset='1' stop-color='%230b5cff'/%3E%3C/linearGradient%3E%3Cfilter id='d' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeDropShadow dx='0' dy='12' stdDeviation='10' flood-color='%23003eac' flood-opacity='.25'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23w)' stroke-width='18' stroke-linecap='round' filter='url(%23d)'%3E%3Cpath d='M42 86c39-34 97-34 136 0'/%3E%3Cpath d='M68 118c25-22 59-22 84 0'/%3E%3Cpath d='M92 149c11-10 25-10 36 0'/%3E%3C/g%3E%3Ccircle cx='110' cy='176' r='19' fill='url(%23w)' filter='url(%23d)'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  text-shadow: none !important;
+}
+
+@media (max-width: 720px) {
+  #userView > .topbar strong::after {
+    content: "" !important;
+  }
+
+  #userView > .topbar span::before {
+    height: 24px !important;
+  }
+}
+
+/* CATV login/search reference tuning - absolute last override. */
+html,
+body {
+  background-color: #020b20 !important;
+  background-image:
+    radial-gradient(circle at 88% 9%, rgba(42, 134, 255, .26), transparent 23rem),
+    radial-gradient(circle at 8% 84%, rgba(36, 132, 255, .24), transparent 25rem),
+    linear-gradient(135deg, rgba(2, 10, 33, .5), rgba(5, 20, 57, .42)),
+    url("assets/catv-network-bg.svg") !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+.login-card,
+.query-panel,
+.network-sheet,
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .86), rgba(232, 240, 252, .72)) !important;
+  border: 1px solid rgba(221, 236, 255, .96) !important;
+  box-shadow:
+    0 0 0 1px rgba(169, 203, 255, .9),
+    0 0 30px rgba(93, 166, 255, .28),
+    0 22px 54px rgba(0, 22, 75, .56),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  backdrop-filter: blur(20px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.15) !important;
+}
+
+#userView > .topbar > div:first-child {
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#userView > .topbar strong {
+  white-space: nowrap !important;
+}
+
+#userView > .topbar strong::after {
+  content: " \C804\C1A1\B9DD  \D1B5\D569  \C870\D68C" !important;
+}
+
+#userView > .topbar span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  white-space: nowrap !important;
+}
+
+#userView > .topbar strong::after {
+  content: " \C804\C1A1\B9DD  \D1B5\D569  \C870\D68C" !important;
+}
+
+#userView > .topbar span::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 1px !important;
+  height: 34px !important;
+  background: rgba(6, 25, 70, .24) !important;
+}
+
+#logoutBtn::before,
+#rackLogoutBtn::before,
+#adminLogoutBtn::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  vertical-align: -4px !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300307a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpath d='M16 17l5-5-5-5'/%3E%3Cpath d='M21 12H9'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+#logoutBtn::before,
+#rackLogoutBtn::before,
+#adminLogoutBtn::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  vertical-align: -4px !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300307a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpath d='M16 17l5-5-5-5'/%3E%3Cpath d='M21 12H9'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.query-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(238, 246, 255, .52)) !important;
+  border-color: rgba(200, 220, 250, .86) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .8),
+    0 12px 28px rgba(1, 28, 82, .12) !important;
+}
+
+.query-card input,
+.login-card input {
+  background: rgba(255, 255, 255, .68) !important;
+  border-color: rgba(151, 184, 230, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+
+.empty-state::before {
+  filter: drop-shadow(0 16px 18px rgba(0, 62, 172, .2)) !important;
+}
+
+@media (max-width: 720px) {
+  html,
+  body {
+    background-image:
+      radial-gradient(circle at 94% 8%, rgba(42, 134, 255, .24), transparent 13rem),
+      radial-gradient(circle at 3% 88%, rgba(36, 132, 255, .22), transparent 15rem),
+      linear-gradient(135deg, rgba(2, 10, 33, .52), rgba(5, 20, 57, .44)),
+      url("assets/catv-network-bg.svg") !important;
+  }
+
+  #userView > .topbar strong::after {
+    content: "" !important;
+  }
+}
+
+/* CATV result-page final override. Keep this block at EOF. */
+body[data-view="loginView"] #userView,
+body[data-view="loginView"] #rackView,
+body[data-view="loginView"] #adminView,
+body[data-view="userView"] #loginView,
+body[data-view="userView"] #rackView,
+body[data-view="userView"] #adminView,
+body[data-view="rackView"] #loginView,
+body[data-view="rackView"] #userView,
+body[data-view="rackView"] #adminView,
+body[data-view="adminView"] #loginView,
+body[data-view="adminView"] #userView,
+body[data-view="adminView"] #rackView,
+.app-shell > section[hidden] {
+  display: none !important;
+}
+
+.app-shell > section.active-view {
+  display: block !important;
+}
+
+#loginView.active-view {
+  display: grid !important;
+}
+
+#userView[data-page="search"] > .topbar .topbar-back-btn {
+  display: none !important;
+}
+
+#userView[data-page="search"] > .query-panel {
+  display: grid !important;
+}
+
+#userView[data-page="search"] .network-sheet {
+  max-width: min(1680px, calc(100vw - 96px)) !important;
+}
+
+#userView[data-page="result"] > .query-panel {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .topbar {
+  width: min(1760px, calc(100vw - 88px)) !important;
+  min-height: 98px !important;
+  margin: 30px auto 24px !important;
+  padding: 18px 28px !important;
+  border-radius: 10px !important;
+}
+
+#userView[data-page="result"] > .topbar > div:last-child {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 24px !important;
+  margin-left: auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#userView[data-page="result"] #searchBackBtn,
+#userView[data-page="result"] #logoutBtn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  width: auto !important;
+  min-width: 156px !important;
+  min-height: 52px !important;
+  padding: 0 28px !important;
+  border: 1px solid rgba(76, 120, 196, .62) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .46) !important;
+  color: #00245f !important;
+  box-shadow: none !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+}
+
+#userView[data-page="result"] #searchBackBtn::before {
+  content: "\2190" !important;
+  font-size: 25px !important;
+  line-height: 1 !important;
+}
+
+#userView[data-page="result"] #searchBackBtn::after {
+  content: "\C870\D68C  \D654\BA74\C73C\B85C" !important;
+}
+
+#userView[data-page="result"] #searchBackBtn {
+  font-size: 19px !important;
+}
+
+#userView[data-page="result"] .network-sheet {
+  width: min(1640px, calc(100vw - 168px)) !important;
+  max-width: min(1640px, calc(100vw - 168px)) !important;
+  margin: 0 auto 40px !important;
+  padding: 36px 42px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(246, 249, 255, .91)) !important;
+  border: 1px solid rgba(182, 207, 245, .9) !important;
+  box-shadow:
+    0 0 0 1px rgba(226, 239, 255, .98),
+    0 0 22px rgba(79, 148, 255, .34),
+    0 18px 40px rgba(0, 16, 60, .36) !important;
+}
+
+.kt-basic-card h2,
+.kt-info-card h2,
+.kt-hfc-panel h2,
+.remarks-card h3 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin: 0 0 22px !important;
+  color: #001d55 !important;
+  font-size: clamp(28px, 2vw, 34px) !important;
+  font-weight: 900 !important;
+  letter-spacing: 0 !important;
+}
+
+.kt-basic-card h2::before {
+  content: "" !important;
+  width: 38px !important;
+  height: 38px !important;
+  flex: 0 0 38px !important;
+  background: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 4L42 14V34L24 44L6 34V14L24 4Z' stroke='%230057ff' stroke-width='3'/%3E%3Cpath d='M24 4V24M24 24V44M6 14L24 24L42 14M6 34L24 24L42 34M15 19L33 29M33 19L15 29' stroke='%23057dff' stroke-width='2'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.kt-info-card h2::before,
+.kt-hfc-panel h2::before,
+.remarks-card h3::before {
+  content: "" !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
+  border-radius: 50% !important;
+  background: radial-gradient(circle at 35% 30%, #65d8ff, #006cff 62%, #0050c9) !important;
+  box-shadow: 0 0 12px rgba(0, 110, 255, .65) !important;
+}
+
+.kt-info-head {
+  align-items: flex-start !important;
+  margin-bottom: 18px !important;
+}
+
+.kt-tabs .active::before,
+.kt-device-head strong::before,
+.kt-device-table-title::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 7px !important;
+  height: 22px !important;
+  margin-right: 12px !important;
+  border-radius: 4px !important;
+  background: linear-gradient(180deg, #169aff, #004fff) !important;
+  vertical-align: -4px !important;
+}
+
+.field-table-head span,
+.kt-line-table thead th {
+  background: linear-gradient(180deg, #096dff 0%, #0052df 100%) !important;
+  color: #fff !important;
+  border-color: rgba(161, 197, 255, .48) !important;
+  font-weight: 900 !important;
+}
+
+.field-table-grid,
+.kt-line-table,
+.kt-basic-table,
+.kt-device-table {
+  border: 1px solid rgba(163, 196, 244, .82) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.field-table-row span,
+.kt-line-table tbody td,
+.kt-basic-table td,
+.kt-basic-table th,
+.kt-device-table td,
+.kt-device-table th {
+  border-color: rgba(188, 209, 238, .88) !important;
+  color: #001e5b !important;
+  font-weight: 700 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn {
+  min-width: 196px !important;
+  min-height: 54px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, #ff661d 0%, #ff3408 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 22px rgba(255, 57, 8, .26) !important;
+  font-size: 21px !important;
+  font-weight: 900 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn::before {
+  content: "" !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-right: 10px !important;
+  display: inline-block !important;
+  vertical-align: -5px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z'/%3E%3Cpath d='M9 3v15M15 6v15'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.cell-link-button {
+  min-width: 92px !important;
+  height: 40px !important;
+  border: 1px solid #ff4b25 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .85) !important;
+  color: #ff3811 !important;
+  box-shadow: none !important;
+  font-weight: 900 !important;
+}
+
+.kt-hfc-panel,
+.remarks-card {
+  width: min(1240px, 100%) !important;
+  margin: 18px auto 0 !important;
+  padding: 28px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(247, 250, 255, .91)) !important;
+  border: 1px solid rgba(177, 203, 242, .88) !important;
+  box-shadow:
+    0 0 0 1px rgba(226, 239, 255, .95),
+    0 0 18px rgba(79, 148, 255, .24),
+    0 14px 28px rgba(0, 22, 70, .18) !important;
+}
+
+.kt-hfc-device {
+  border: 1px solid rgba(172, 200, 242, .86) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .62) !important;
+  padding: 22px !important;
+}
+
+.kt-device-head strong {
+  color: #001e5b !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
+}
+
+.field-action {
+  min-width: 148px !important;
+  min-height: 48px !important;
+  border: 1px solid #ff4b25 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .9) !important;
+  color: #ff3811 !important;
+  box-shadow: none !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+}
+
+.field-action span {
+  display: none !important;
+}
+
+.field-action::before {
+  content: "" !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-right: 10px !important;
+  display: inline-block !important;
+  vertical-align: -5px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff3811' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 4l1.2 2H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.3l1.2-2h5z'/%3E%3Ccircle cx='12' cy='13' r='3.5'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.kt-save-btn {
+  background: linear-gradient(180deg, #ff661d 0%, #ff3408 100%) !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  box-shadow: 0 12px 22px rgba(255, 57, 8, .24) !important;
+}
+
+@media (max-width: 900px) {
+  #userView[data-page="result"] > .topbar {
+    width: calc(100vw - 24px) !important;
+    min-height: auto !important;
+    margin: 12px auto 14px !important;
+    padding: 12px !important;
+    gap: 12px !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:last-child {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn,
+  #userView[data-page="result"] #logoutBtn {
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+    min-height: 44px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+  }
+
+  #userView[data-page="result"] .network-sheet {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+    padding: 18px 14px !important;
+    margin-bottom: 24px !important;
+  }
+
+  .kt-basic-card h2,
+  .kt-info-card h2,
+  .kt-hfc-panel h2,
+  .remarks-card h3 {
+    font-size: 22px !important;
+  }
+
+  .field-table-head span,
+  .field-table-row span {
+    font-size: 14px !important;
+  }
+
+  .kt-diagram-btn.field-line-diagram-btn,
+  .field-action {
+    min-width: 0 !important;
+    width: auto !important;
+    font-size: 15px !important;
+  }
+}
+
+/* CATV result page and strict view separation override - absolute final. */
+body[data-view="loginView"] #userView,
+body[data-view="loginView"] #rackView,
+body[data-view="loginView"] #adminView,
+body[data-view="userView"] #loginView,
+body[data-view="userView"] #rackView,
+body[data-view="userView"] #adminView,
+body[data-view="rackView"] #loginView,
+body[data-view="rackView"] #userView,
+body[data-view="rackView"] #adminView,
+body[data-view="adminView"] #loginView,
+body[data-view="adminView"] #userView,
+body[data-view="adminView"] #rackView,
+.app-shell > section[hidden] {
+  display: none !important;
+}
+
+.app-shell > section.active-view {
+  display: block !important;
+}
+
+#loginView.active-view {
+  display: grid !important;
+}
+
+#userView[data-page="search"] > .topbar .topbar-back-btn {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .query-panel {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .topbar {
+  width: min(1540px, calc(100% - clamp(56px, 5vw, 96px))) !important;
+  min-height: 88px !important;
+  margin: clamp(18px, 2vw, 28px) auto clamp(18px, 2vw, 28px) !important;
+  padding: 16px 28px !important;
+  border-radius: 10px !important;
+  gap: 18px !important;
+}
+
+#userView[data-page="result"] > .topbar > div:first-child {
+  flex: 1 1 auto !important;
+}
+
+#userView[data-page="result"] > .topbar span {
+  color: #061946 !important;
+  font-weight: 800 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn,
+#userView[data-page="result"] > .topbar .ghost-btn {
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 156px !important;
+  min-height: 52px !important;
+  margin: 0 !important;
+  padding: 0 22px !important;
+  border: 1px solid #9db8e4 !important;
+  border-radius: 7px !important;
+  color: #00245c !important;
+  background: rgba(255, 255, 255, .48) !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn::before {
+  content: "\2190" !important;
+  margin-right: 10px !important;
+  font-size: 22px !important;
+  line-height: 1 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn::after {
+  content: "\C870\D68C  \D654\BA74\C73C\B85C" !important;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  width: min(1440px, calc(100% - clamp(72px, 8vw, 140px))) !important;
+  max-width: 1440px !important;
+  margin: 0 auto clamp(28px, 3vw, 48px) !important;
+  padding: clamp(30px, 3vw, 38px) !important;
+  border: 1px solid rgba(206, 226, 255, .96) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(247, 250, 255, .9)) !important;
+  box-shadow:
+    0 0 0 1px rgba(178, 209, 255, .7),
+    0 16px 38px rgba(0, 30, 88, .36),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+}
+
+.kt-field-screen.field-record-sheet {
+  gap: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.kt-basic-card h2,
+.kt-info-card h2 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin: 0 0 18px !important;
+  color: #061946 !important;
+  font-size: clamp(22px, 1.7vw, 28px) !important;
+  font-weight: 950 !important;
+}
+
+.kt-basic-card h2::before {
+  content: "" !important;
+  width: 31px !important;
+  height: 31px !important;
+  margin: 0 !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'%3E%3Cpath d='M32 5 55 18v28L32 59 9 46V18z' stroke='%230b6cff' stroke-width='4'/%3E%3Cpath d='M9 18l23 14 23-14M32 32v27' stroke='%230b6cff' stroke-width='4'/%3E%3Cpath d='M32 5v27' stroke='%236bd1ff' stroke-width='3'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  box-shadow: none !important;
+}
+
+.kt-station-card h2::before,
+.kt-hfc-card h2::before,
+.kt-remarks-card h2::before {
+  content: "" !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin: 0 4px 0 0 !important;
+  border-radius: 50% !important;
+  background: linear-gradient(180deg, #40c0ff, #0062ff) !important;
+  box-shadow: 0 0 10px rgba(0, 92, 255, .42) !important;
+}
+
+.kt-tabs {
+  margin: 0 0 8px !important;
+  border: 0 !important;
+  color: #061946 !important;
+  font-weight: 900 !important;
+}
+
+.kt-tabs .active::before,
+.kt-device-head strong::before,
+.kt-device-table-title::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 6px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  border-radius: 3px !important;
+  vertical-align: -4px !important;
+  background: linear-gradient(180deg, #167cff, #0057ff) !important;
+}
+
+.kt-field-screen .field-table {
+  overflow: hidden !important;
+  border: 1px solid #b1caf2 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .72) !important;
+}
+
+.kt-field-screen .field-table-head span {
+  min-height: 44px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #0c72ff, #0051ed) !important;
+  font-weight: 950 !important;
+}
+
+.kt-field-screen .field-table span,
+.kt-field-screen .field-table button {
+  min-height: 44px !important;
+  color: #061946 !important;
+  border-color: #c6d8f6 !important;
+  font-weight: 800 !important;
+}
+
+.kt-field-screen .field-table button {
+  min-width: 82px !important;
+  min-height: 34px !important;
+  border: 1px solid #ff4a22 !important;
+  border-radius: 7px !important;
+  color: #ff330b !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: none !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn {
+  min-width: 170px !important;
+  min-height: 52px !important;
+  padding: 0 26px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff5b18, #f33a09) !important;
+  box-shadow: 0 10px 20px rgba(255, 61, 11, .26) !important;
+  font-size: 18px !important;
+  font-weight: 950 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn::before {
+  content: "\1F5FA" !important;
+  margin-right: 10px !important;
+}
+
+.kt-hfc-panel {
+  padding: 0 !important;
+  border: 1px solid #b1caf2 !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, .42) !important;
+}
+
+.kt-hfc-device {
+  padding: 28px !important;
+  border: 0 !important;
+  border-bottom: 1px solid #c9daf6 !important;
+  background: transparent !important;
+}
+
+.kt-hfc-device:last-child {
+  border-bottom: 0 !important;
+}
+
+.kt-device-head strong {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: #061946 !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+}
+
+.kt-device-head .field-action {
+  min-width: 132px !important;
+  min-height: 44px !important;
+  border: 1px solid #ff4a22 !important;
+  border-radius: 8px !important;
+  color: #ff330b !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+}
+
+.kt-device-head .field-action span {
+  display: none !important;
+}
+
+.kt-device-head .field-action::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 9px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff330b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8h3l2-3h6l2 3h3v11H4z'/%3E%3Ccircle cx='12' cy='13.5' r='3.2'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.kt-save-btn {
+  min-width: 100px !important;
+  min-height: 54px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff5b18, #f33a09) !important;
+  box-shadow: 0 10px 20px rgba(255, 61, 11, .24) !important;
+}
+
+@media (max-width: 720px) {
+  #userView[data-page="result"] > .topbar,
+  .network-sheet:has(.kt-field-screen) {
+    width: calc(100% - 20px) !important;
+  }
+
+  #userView[data-page="result"] > .topbar .topbar-back-btn,
+  #userView[data-page="result"] > .topbar .ghost-btn {
+    min-width: 0 !important;
+    min-height: 42px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* CATV result page and strict view separation override. */
+body[data-view="loginView"] #userView,
+body[data-view="loginView"] #rackView,
+body[data-view="loginView"] #adminView,
+body[data-view="userView"] #loginView,
+body[data-view="userView"] #rackView,
+body[data-view="userView"] #adminView,
+body[data-view="rackView"] #loginView,
+body[data-view="rackView"] #userView,
+body[data-view="rackView"] #adminView,
+body[data-view="adminView"] #loginView,
+body[data-view="adminView"] #userView,
+body[data-view="adminView"] #rackView,
+.app-shell > section[hidden] {
+  display: none !important;
+}
+
+.app-shell > section.active-view {
+  display: block !important;
+}
+
+#loginView.active-view {
+  display: grid !important;
+}
+
+#userView[data-page="search"] > .topbar .topbar-back-btn {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .query-panel {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .topbar {
+  width: min(1540px, calc(100% - clamp(56px, 5vw, 96px))) !important;
+  min-height: 88px !important;
+  margin: clamp(18px, 2vw, 28px) auto clamp(18px, 2vw, 28px) !important;
+  padding: 16px 28px !important;
+  border-radius: 10px !important;
+  gap: 18px !important;
+}
+
+#userView[data-page="result"] > .topbar > div:first-child {
+  flex: 1 1 auto !important;
+}
+
+#userView[data-page="result"] > .topbar span {
+  color: #061946 !important;
+  font-weight: 800 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn,
+#userView[data-page="result"] > .topbar .ghost-btn {
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: 156px !important;
+  min-height: 52px !important;
+  margin: 0 !important;
+  padding: 0 22px !important;
+  border: 1px solid #9db8e4 !important;
+  border-radius: 7px !important;
+  color: #00245c !important;
+  background: rgba(255, 255, 255, .48) !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn::before {
+  content: "\2190" !important;
+  margin-right: 10px !important;
+  font-size: 22px !important;
+  line-height: 1 !important;
+}
+
+#userView[data-page="result"] > .topbar .topbar-back-btn::after {
+  content: "\C870\D68C  \D654\BA74\C73C\B85C" !important;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  width: min(1440px, calc(100% - clamp(72px, 8vw, 140px))) !important;
+  max-width: 1440px !important;
+  margin: 0 auto clamp(28px, 3vw, 48px) !important;
+  padding: clamp(30px, 3vw, 38px) !important;
+  border: 1px solid rgba(206, 226, 255, .96) !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(247, 250, 255, .9)) !important;
+  box-shadow:
+    0 0 0 1px rgba(178, 209, 255, .7),
+    0 16px 38px rgba(0, 30, 88, .36),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+}
+
+.kt-field-screen.field-record-sheet {
+  gap: 22px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.kt-basic-card h2,
+.kt-info-card h2 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin: 0 0 18px !important;
+  color: #061946 !important;
+  font-size: clamp(22px, 1.7vw, 28px) !important;
+  font-weight: 950 !important;
+}
+
+.kt-basic-card h2::before {
+  content: "" !important;
+  width: 31px !important;
+  height: 31px !important;
+  margin: 0 !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64' fill='none'%3E%3Cpath d='M32 5 55 18v28L32 59 9 46V18z' stroke='%230b6cff' stroke-width='4'/%3E%3Cpath d='M9 18l23 14 23-14M32 32v27' stroke='%230b6cff' stroke-width='4'/%3E%3Cpath d='M32 5v27' stroke='%236bd1ff' stroke-width='3'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  box-shadow: none !important;
+}
+
+.kt-station-card h2::before,
+.kt-hfc-card h2::before,
+.kt-remarks-card h2::before {
+  content: "" !important;
+  width: 12px !important;
+  height: 12px !important;
+  margin: 0 4px 0 0 !important;
+  border-radius: 50% !important;
+  background: linear-gradient(180deg, #40c0ff, #0062ff) !important;
+  box-shadow: 0 0 10px rgba(0, 92, 255, .42) !important;
+}
+
+.kt-tabs {
+  margin: 0 0 8px !important;
+  border: 0 !important;
+  color: #061946 !important;
+  font-weight: 900 !important;
+}
+
+.kt-tabs .active::before,
+.kt-device-head strong::before,
+.kt-device-table-title::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 6px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  border-radius: 3px !important;
+  vertical-align: -4px !important;
+  background: linear-gradient(180deg, #167cff, #0057ff) !important;
+}
+
+.kt-field-screen .field-table {
+  overflow: hidden !important;
+  border: 1px solid #b1caf2 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .72) !important;
+}
+
+.kt-field-screen .field-table-head span {
+  min-height: 44px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #0c72ff, #0051ed) !important;
+  font-weight: 950 !important;
+}
+
+.kt-field-screen .field-table span,
+.kt-field-screen .field-table button {
+  min-height: 44px !important;
+  color: #061946 !important;
+  border-color: #c6d8f6 !important;
+  font-weight: 800 !important;
+}
+
+.kt-field-screen .field-table button {
+  min-width: 82px !important;
+  min-height: 34px !important;
+  border: 1px solid #ff4a22 !important;
+  border-radius: 7px !important;
+  color: #ff330b !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: none !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn {
+  min-width: 170px !important;
+  min-height: 52px !important;
+  padding: 0 26px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff5b18, #f33a09) !important;
+  box-shadow: 0 10px 20px rgba(255, 61, 11, .26) !important;
+  font-size: 18px !important;
+  font-weight: 950 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn::before {
+  content: "\1F5FA" !important;
+  margin-right: 10px !important;
+}
+
+.kt-hfc-panel {
+  padding: 0 !important;
+  border: 1px solid #b1caf2 !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, .42) !important;
+}
+
+.kt-hfc-device {
+  padding: 28px !important;
+  border: 0 !important;
+  border-bottom: 1px solid #c9daf6 !important;
+  background: transparent !important;
+}
+
+.kt-hfc-device:last-child {
+  border-bottom: 0 !important;
+}
+
+.kt-device-head strong {
+  display: inline-flex !important;
+  align-items: center !important;
+  color: #061946 !important;
+  font-size: 22px !important;
+  font-weight: 950 !important;
+}
+
+.kt-device-head .field-action {
+  min-width: 132px !important;
+  min-height: 44px !important;
+  border: 1px solid #ff4a22 !important;
+  border-radius: 8px !important;
+  color: #ff330b !important;
+  background: rgba(255, 255, 255, .9) !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 950 !important;
+}
+
+.kt-device-head .field-action span {
+  display: none !important;
+}
+
+.kt-device-head .field-action::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 9px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff330b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8h3l2-3h6l2 3h3v11H4z'/%3E%3Ccircle cx='12' cy='13.5' r='3.2'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.kt-save-btn {
+  min-width: 100px !important;
+  min-height: 54px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #ff5b18, #f33a09) !important;
+  box-shadow: 0 10px 20px rgba(255, 61, 11, .24) !important;
+}
+
+@media (max-width: 720px) {
+  #userView[data-page="result"] > .topbar,
+  .network-sheet:has(.kt-field-screen) {
+    width: calc(100% - 20px) !important;
+  }
+
+  #userView[data-page="result"] > .topbar .topbar-back-btn,
+  #userView[data-page="result"] > .topbar .ghost-btn {
+    min-width: 0 !important;
+    min-height: 42px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* CATV login/search reference tuning - encoding-safe final override. */
+html,
+body {
+  background-color: #020b20 !important;
+  background-image:
+    radial-gradient(circle at 88% 9%, rgba(42, 134, 255, .26), transparent 23rem),
+    radial-gradient(circle at 8% 84%, rgba(36, 132, 255, .24), transparent 25rem),
+    linear-gradient(135deg, rgba(2, 10, 33, .5), rgba(5, 20, 57, .42)),
+    url("assets/catv-network-bg.svg") !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+.login-card,
+.query-panel,
+.network-sheet,
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .86), rgba(232, 240, 252, .72)) !important;
+  border: 1px solid rgba(221, 236, 255, .96) !important;
+  box-shadow:
+    0 0 0 1px rgba(169, 203, 255, .9),
+    0 0 30px rgba(93, 166, 255, .28),
+    0 22px 54px rgba(0, 22, 75, .56),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  backdrop-filter: blur(20px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.15) !important;
+}
+
+#userView > .topbar > div:first-child {
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#userView > .topbar strong {
+  white-space: nowrap !important;
+}
+
+#userView > .topbar strong::after {
+  content: " \C804\C1A1\B9DD  \D1B5\D569  \C870\D68C" !important;
+}
+
+#userView > .topbar span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  white-space: nowrap !important;
+}
+
+#userView > .topbar span::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 1px !important;
+  height: 34px !important;
+  background: rgba(6, 25, 70, .24) !important;
+}
+
+#logoutBtn::before,
+#rackLogoutBtn::before,
+#adminLogoutBtn::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  vertical-align: -4px !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300307a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpath d='M16 17l5-5-5-5'/%3E%3Cpath d='M21 12H9'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.query-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(238, 246, 255, .52)) !important;
+  border-color: rgba(200, 220, 250, .86) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .8),
+    0 12px 28px rgba(1, 28, 82, .12) !important;
+}
+
+.query-card input,
+.login-card input {
+  background: rgba(255, 255, 255, .68) !important;
+  border-color: rgba(151, 184, 230, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+
+.empty-state::before {
+  filter: drop-shadow(0 16px 18px rgba(0, 62, 172, .2)) !important;
+}
+
+@media (max-width: 720px) {
+  html,
+  body {
+    background-image:
+      radial-gradient(circle at 94% 8%, rgba(42, 134, 255, .24), transparent 13rem),
+      radial-gradient(circle at 3% 88%, rgba(36, 132, 255, .22), transparent 15rem),
+      linear-gradient(135deg, rgba(2, 10, 33, .52), rgba(5, 20, 57, .44)),
+      url("assets/catv-network-bg.svg") !important;
+  }
+
+  #userView > .topbar strong::after {
+    content: "" !important;
+  }
+}
+
+@media (max-width: 720px) {
+  body {
+    background-attachment: scroll;
+  }
+
+  #userView,
+  #rackView,
+  #adminView {
+    padding-top: 10px;
+  }
+
+  .login-view {
+    align-items: start;
+    padding: 18px 14px 28px;
+  }
+
+  .login-card {
+    width: 100%;
+    padding: 26px 20px;
+    border-radius: 14px;
+  }
+
+  .login-card::before {
+    width: 72px;
+    height: 72px;
+  }
+
+  .login-card h2::before {
+    font-size: 27px;
+  }
+
+  .login-card h2::after {
+    font-size: 15px;
+  }
+
+  .topbar,
+  #userView > .topbar,
+  #rackView > .topbar,
+  #adminView > .topbar {
+    top: 8px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  .topbar > div:first-child {
+    align-items: center;
+  }
+
+  .topbar > div:first-child::before {
+    width: 42px;
+    height: 42px;
+  }
+
+  .topbar strong,
+  #userView > .topbar strong,
+  #rackView > .topbar strong,
+  #adminView > .topbar strong {
+    font-size: 24px;
+  }
+
+  .topbar .topbar-actions,
+  .topbar > button,
+  .topbar-actions button,
+  .ghost-btn {
+    width: 100%;
+  }
+
+  .query-panel,
+  .network-sheet,
+  .network-sheet:has(.kt-field-screen),
+  .rack-sheet {
+    width: calc(100% - 20px);
+    border-radius: 12px;
+  }
+
+  .query-panel {
+    padding: 14px;
+  }
+
+  .query-card {
+    padding: 16px;
+  }
+
+  .query-card input,
+  .query-card .primary-btn {
+    min-height: 54px;
+    font-size: 16px;
+  }
+
+  .network-sheet {
+    min-height: 300px;
+    padding: 16px;
+  }
+
+  .empty-state {
+    min-height: 240px;
+    font-size: 16px;
+  }
+
+  .empty-state::before {
+    width: 104px;
+    height: 104px;
+  }
+
+  .kt-basic-card,
+  .kt-station-card,
+  .kt-hfc-card,
+  .kt-remarks-card,
+  .rack-sheet {
+    padding: 16px;
+  }
+
+  .kt-info-card h2 {
+    font-size: 22px;
+  }
+
+  .kt-tabs {
+    font-size: 15px;
+  }
+
+  .kt-field-screen .field-table {
+    overflow-x: auto;
+  }
+
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div {
+    min-width: 560px;
+  }
+
+  .kt-field-screen .cell-device-table > div {
+    min-width: 680px;
+  }
+
+  .kt-field-screen .field-table span,
+  .kt-field-screen .field-table button {
+    font-size: 15px;
+  }
+
+  .kt-device-head {
+    grid-template-columns: 1fr;
+  }
+
+  .kt-device-head .field-action {
+    width: 100%;
+  }
+
+  .kt-device-list div {
+    grid-template-columns: 92px minmax(0, 1fr);
+    font-size: 15px;
+  }
+
+  .kt-device-list dt,
+  .kt-device-list dd,
+  .kt-device-label,
+  .kt-device-value {
+    min-height: 48px;
+    padding: 8px 10px;
+  }
+
+  .rack-heading {
+    gap: 16px;
+  }
+
+  .rack-heading h1 {
+    font-size: 34px;
+  }
+
+  .rack-meta {
+    width: 100%;
+  }
+
+  .line-diagram-zoom-toolbar {
+    position: sticky;
+    top: 8px;
+  }
+
+  .line-diagram-sheet .uploaded-floor-plan,
+  .pdf-line-diagram-canvas {
+    min-height: 56dvh !important;
+    max-height: 64dvh !important;
+  }
+
+  .rack-diagram-sheet .floor-plan {
+    min-height: 58dvh;
+    height: 58dvh;
+  }
+}
+
 .floor-plan-world {
   position: relative;
   width: 960px;
@@ -5385,5 +7423,1926 @@ body {
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 10px;
+  }
+}
+
+/* CATV reference UI final override. Keep this block last. */
+:root {
+  --catv-ref-navy: #06173a;
+  --catv-ref-ink: #061946;
+  --catv-ref-blue: #075cff;
+  --catv-ref-blue-2: #0087ff;
+  --catv-ref-orange: #ff3d0b;
+  --catv-ref-line: #a9c5f5;
+  --catv-ref-glass: rgba(255, 255, 255, .93);
+  --catv-ref-glass-soft: rgba(255, 255, 255, .84);
+  --catv-ref-shadow: 0 0 0 1px rgba(193, 218, 255, .88), 0 18px 42px rgba(0, 46, 143, .36), inset 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+html,
+body {
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 100% !important;
+  margin: 0 !important;
+  color: var(--catv-ref-ink) !important;
+  background-color: #020b20 !important;
+  background-image:
+    radial-gradient(circle at 90% 8%, rgba(25, 104, 226, .24), transparent 22rem),
+    radial-gradient(circle at 9% 86%, rgba(15, 111, 255, .2), transparent 25rem),
+    linear-gradient(135deg, rgba(2, 10, 33, .99), rgba(5, 20, 57, .97)),
+    url("assets/catv-network-bg.svg") !important;
+  background-position: center !important;
+  background-size: cover !important;
+  background-attachment: fixed !important;
+  overflow-x: hidden !important;
+}
+
+body::before {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(circle at 94% 14%, rgba(48, 147, 255, .2), transparent 18rem),
+    radial-gradient(circle at 3% 75%, rgba(31, 128, 255, .16), transparent 22rem) !important;
+}
+
+.app-shell,
+#loginView,
+#userView,
+#rackView,
+#adminView {
+  width: 100% !important;
+  min-height: 100dvh !important;
+  background: transparent !important;
+}
+
+.hidden {
+  display: none !important;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit !important;
+}
+
+.login-view {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  place-items: center !important;
+  min-height: 100dvh !important;
+  padding: clamp(18px, 4vw, 48px) !important;
+  background: transparent !important;
+}
+
+.login-view .brand-panel {
+  display: none !important;
+}
+
+.login-card {
+  position: relative !important;
+  width: min(548px, calc(100vw - 34px)) !important;
+  margin: 0 auto !important;
+  padding: clamp(28px, 3.2vw, 36px) clamp(28px, 4.2vw, 52px) clamp(30px, 3.4vw, 40px) !important;
+  border: 1px solid rgba(220, 234, 255, .95) !important;
+  border-radius: 14px !important;
+  color: #06133a !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(238, 244, 255, .9)) !important;
+  box-shadow: var(--catv-ref-shadow) !important;
+  backdrop-filter: blur(16px) saturate(1.1) !important;
+}
+
+.login-card::before {
+  content: "" !important;
+  display: block !important;
+  width: 92px !important;
+  height: 92px !important;
+  margin: 0 auto 14px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 180'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='35' y1='8' x2='190' y2='165' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%236bd1ff'/%3E%3Cstop offset='.46' stop-color='%230b76ff'/%3E%3Cstop offset='1' stop-color='%23004be8'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeDropShadow dx='0' dy='8' stdDeviation='6' flood-color='%23003fae' flood-opacity='.35'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='%23035cff' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' opacity='.9'%3E%3Cpath d='M110 28 43 66v76l67 38 67-38V66z'/%3E%3Cpath d='M43 66l67 38 67-38M110 104v76'/%3E%3C/g%3E%3Cg filter='url(%23s)' stroke='%239ed8ff' stroke-width='4' stroke-linejoin='round'%3E%3Cpath d='M110 4 137 19v31l-27 16-27-16V19z' fill='url(%23g)'/%3E%3Cpath d='M46 91 73 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3Cpath d='M174 91 201 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat !important;
+  filter: drop-shadow(0 9px 14px rgba(0, 92, 255, .32)) !important;
+}
+
+.login-card h2 {
+  display: block !important;
+  margin: 0 0 16px !important;
+  color: transparent !important;
+  font-size: 0 !important;
+  line-height: 1 !important;
+  text-align: center !important;
+}
+
+.login-card h2::before {
+  content: "CATV 전송망 통합 조회" !important;
+  display: block !important;
+  color: #020817 !important;
+  font-size: clamp(30px, 3.1vw, 40px) !important;
+  font-weight: 950 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.16 !important;
+  white-space: nowrap !important;
+}
+
+.login-card h2::after {
+  content: "CELL 및 전용선을 조회하여 HFC(동축)과\A국사(함, 직선도) 정보를 확인합니다." !important;
+  display: block !important;
+  margin: 10px auto 0 !important;
+  color: #16458d !important;
+  font-size: clamp(15px, 1.35vw, 18px) !important;
+  font-weight: 700 !important;
+  line-height: 1.45 !important;
+  white-space: pre-line !important;
+}
+
+.login-card label {
+  display: grid !important;
+  gap: 8px !important;
+  margin-top: 14px !important;
+  color: #050f28 !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+}
+
+.login-card input {
+  width: 100% !important;
+  min-height: 50px !important;
+  box-sizing: border-box !important;
+  padding: 0 16px !important;
+  border: 1px solid #b7c8ed !important;
+  border-radius: 8px !important;
+  color: #061946 !important;
+  background: rgba(255, 255, 255, .64) !important;
+  font-size: 17px !important;
+  font-weight: 600 !important;
+}
+
+.login-card input::placeholder {
+  color: #5c73ad !important;
+  font-weight: 500 !important;
+}
+
+.password-field {
+  position: relative !important;
+  display: block !important;
+}
+
+.password-field input {
+  padding-right: 52px !important;
+}
+
+.password-toggle {
+  position: absolute !important;
+  top: 50% !important;
+  right: 10px !important;
+  display: grid !important;
+  place-items: center !important;
+  width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 0 !important;
+  transform: translateY(-50%) !important;
+  border: 0 !important;
+  color: transparent !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231f55aa' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center / 22px 22px no-repeat !important;
+  box-shadow: none !important;
+  font-size: 20px !important;
+  line-height: 1 !important;
+}
+
+.password-toggle.is-visible {
+  color: transparent !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23004de2' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6S2 12 2 12Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E") center / 22px 22px no-repeat !important;
+}
+
+.remember-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center !important;
+  gap: 10px !important;
+  margin: 12px 0 0 !important;
+  color: #163a7b !important;
+  font-size: 15px !important;
+  font-weight: 800 !important;
+}
+
+.remember-row input {
+  flex: 0 0 auto !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 !important;
+}
+
+.login-card .primary-btn {
+  width: 100% !important;
+  min-height: 56px !important;
+  margin-top: 14px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #137cff, #004dff) !important;
+  box-shadow: 0 10px 22px rgba(0, 81, 255, .32) !important;
+  font-size: 18px !important;
+  font-weight: 900 !important;
+}
+
+.login-card .account-hint {
+  margin-top: 28px !important;
+  color: #133c83 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  text-align: center !important;
+}
+
+#userView,
+#rackView,
+#adminView {
+  padding: clamp(14px, 2.1vw, 30px) 0 clamp(30px, 4vw, 60px) !important;
+}
+
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  position: sticky !important;
+  top: clamp(10px, 1.9vw, 28px) !important;
+  z-index: 50 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 18px !important;
+  width: min(1580px, calc(100% - clamp(32px, 5vw, 96px))) !important;
+  min-height: clamp(74px, 7.2vw, 96px) !important;
+  margin: 0 auto clamp(22px, 3.4vw, 42px) !important;
+  padding: 0 clamp(22px, 3vw, 38px) !important;
+  border: 1px solid rgba(210, 229, 255, .96) !important;
+  border-radius: 14px !important;
+  color: var(--catv-ref-ink) !important;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, .97), rgba(235, 244, 255, .88)) !important;
+  box-shadow: var(--catv-ref-shadow) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.topbar > div:first-child,
+#userView > .topbar > div:first-child,
+#rackView > .topbar > div:first-child,
+#adminView > .topbar > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  min-width: 0 !important;
+}
+
+.topbar > div:first-child::before {
+  content: "" !important;
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 58px !important;
+  height: 58px !important;
+  background: url("assets/catv-app-icon.svg") center / contain no-repeat !important;
+}
+
+.topbar strong,
+#userView > .topbar strong,
+#rackView > .topbar strong,
+#adminView > .topbar strong {
+  display: block !important;
+  color: var(--catv-ref-ink) !important;
+  font-size: clamp(27px, 2.9vw, 39px) !important;
+  font-weight: 950 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+.topbar span,
+#userView > .topbar span,
+#rackView > .topbar span,
+#adminView > .topbar span {
+  display: block !important;
+  color: #0e2c72 !important;
+  font-size: clamp(16px, 1.3vw, 20px) !important;
+  font-weight: 800 !important;
+  white-space: nowrap !important;
+}
+
+.topbar .ghost-btn,
+#userView > .topbar .ghost-btn,
+#rackView > .topbar .ghost-btn,
+#adminView > .topbar .ghost-btn,
+.topbar-back-btn {
+  min-height: 50px !important;
+  padding: 0 26px !important;
+  border: 1px solid #97b6ed !important;
+  border-radius: 8px !important;
+  color: #08235f !important;
+  background: rgba(255, 255, 255, .58) !important;
+  box-shadow: none !important;
+  font-size: 16px !important;
+  font-weight: 900 !important;
+}
+
+.query-panel {
+  width: min(1360px, calc(100% - clamp(42px, 10vw, 260px))) !important;
+  max-width: none !important;
+  margin: 0 auto 28px !important;
+  padding: clamp(28px, 3vw, 36px) !important;
+  border: 1px solid rgba(206, 226, 255, .95) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(236, 244, 255, .86)) !important;
+  box-shadow: var(--catv-ref-shadow) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.split-query-panel {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(320px, 1fr)) !important;
+  gap: clamp(24px, 3vw, 34px) !important;
+}
+
+.query-card {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  align-items: end !important;
+  gap: 16px !important;
+  padding: 26px !important;
+  border: 1px solid #b9cff5 !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .54) !important;
+}
+
+.query-card label {
+  display: grid !important;
+  gap: 14px !important;
+  color: var(--catv-ref-ink) !important;
+  font-size: 20px !important;
+  font-weight: 950 !important;
+}
+
+.query-card input {
+  min-height: 62px !important;
+  padding: 0 18px !important;
+  border: 1px solid #aac1ed !important;
+  border-radius: 8px !important;
+  color: #061946 !important;
+  background: rgba(255, 255, 255, .72) !important;
+  font-size: 19px !important;
+  font-weight: 700 !important;
+}
+
+.query-card input::placeholder {
+  color: #536ca8 !important;
+}
+
+.query-card .primary-btn {
+  min-width: 166px !important;
+  min-height: 62px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  background: linear-gradient(180deg, #1682ff, #004dff) !important;
+  box-shadow: 0 10px 22px rgba(0, 77, 255, .3) !important;
+  font-size: 19px !important;
+  font-weight: 950 !important;
+}
+
+.network-sheet {
+  width: min(1320px, calc(100% - clamp(42px, 10vw, 260px))) !important;
+  max-width: none !important;
+  min-height: 430px !important;
+  margin: 0 auto !important;
+  padding: clamp(30px, 3.5vw, 48px) !important;
+  border: 1px solid rgba(206, 226, 255, .95) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .94), rgba(236, 244, 255, .84)) !important;
+  box-shadow: var(--catv-ref-shadow) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+.empty-state {
+  min-height: clamp(300px, 38vw, 460px) !important;
+  display: grid !important;
+  place-items: center !important;
+  color: #06246a !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+  text-align: center !important;
+}
+
+.empty-state::before {
+  content: "⌁" !important;
+  display: block !important;
+  margin-bottom: 18px !important;
+  color: #2c86ff !important;
+  font-size: clamp(108px, 12vw, 162px) !important;
+  line-height: .8 !important;
+  text-shadow: 0 8px 18px rgba(0, 72, 200, .24) !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen),
+#rackView {
+  background: transparent !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .query-panel {
+  display: none !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar {
+  display: flex !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar > div {
+  grid-column: auto !important;
+  justify-self: auto !important;
+  text-align: left !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar strong {
+  display: block !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar span {
+  font-size: clamp(16px, 1.3vw, 20px) !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar span::after,
+#userView:has(#resultPanel .kt-field-screen) > .topbar::after,
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn::before {
+  content: none !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .ghost-btn {
+  display: inline-flex !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn {
+  position: static !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-height: 50px !important;
+  margin: 0 12px 0 auto !important;
+}
+
+#userView:has(#resultPanel .kt-field-screen) > .topbar .topbar-back-btn::after,
+#rackView .topbar-actions #backToResultBtn::before {
+  content: "← " !important;
+}
+
+#searchBackBtn::after {
+  content: "조회 화면으로" !important;
+}
+
+.network-sheet:has(.kt-field-screen) {
+  width: min(1420px, calc(100% - clamp(60px, 11vw, 190px))) !important;
+  max-width: 1420px !important;
+  padding: clamp(28px, 3vw, 40px) !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .97), rgba(248, 251, 255, .92)) !important;
+  border-radius: 12px !important;
+}
+
+.kt-field-screen.field-record-sheet {
+  width: 100% !important;
+  max-width: none !important;
+  gap: 22px !important;
+  color: #061946 !important;
+  background: transparent !important;
+}
+
+.kt-info-card,
+.kt-station-card,
+.kt-hfc-card,
+.kt-remarks-card {
+  border: 1px solid #aecaef !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .7) !important;
+  box-shadow: none !important;
+}
+
+.kt-info-card h2,
+.kt-field-screen h2,
+.rack-sheet h2 {
+  color: var(--catv-ref-ink) !important;
+  font-weight: 950 !important;
+}
+
+.kt-info-card h2::before,
+.kt-field-screen h2::before,
+.rack-sheet h2::before {
+  background: linear-gradient(180deg, #26b0ff, #005cff) !important;
+  box-shadow: 0 0 10px rgba(0, 92, 255, .32) !important;
+}
+
+.kt-field-screen .field-table {
+  overflow: hidden !important;
+  border: 1px solid #b2c9ef !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, .72) !important;
+}
+
+.kt-field-screen .field-table-head span {
+  color: #fff !important;
+  background: linear-gradient(180deg, #086cff, #004ee8) !important;
+  font-weight: 950 !important;
+}
+
+.kt-field-screen .field-table span {
+  color: #061946 !important;
+  border-color: #c6d8f6 !important;
+  background: rgba(255, 255, 255, .62) !important;
+  font-weight: 700 !important;
+}
+
+.kt-field-screen .field-table button,
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn,
+.field-action {
+  border: 1px solid var(--catv-ref-orange) !important;
+  border-radius: 8px !important;
+  color: #ff330b !important;
+  background: rgba(255, 255, 255, .78) !important;
+  box-shadow: none !important;
+  font-weight: 950 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn {
+  color: #fff !important;
+  border-color: transparent !important;
+  background: linear-gradient(180deg, #ff5b14, #f53607) !important;
+  box-shadow: 0 8px 18px rgba(255, 61, 11, .25) !important;
+}
+
+.kt-device-info-table {
+  border-color: #b7cdf2 !important;
+  border-radius: 9px !important;
+  overflow: hidden !important;
+}
+
+.kt-device-info-table .kt-device-label {
+  color: #061946 !important;
+  background: rgba(238, 246, 255, .78) !important;
+  font-weight: 950 !important;
+}
+
+.kt-device-info-table .kt-device-value {
+  color: #061946 !important;
+  background: rgba(255, 255, 255, .54) !important;
+}
+
+.kt-field-screen .remarks-editor textarea {
+  border: 1px solid #aecaef !important;
+  border-radius: 9px !important;
+  color: #061946 !important;
+  background: rgba(255, 255, 255, .64) !important;
+}
+
+.rack-page {
+  width: min(1500px, calc(100% - clamp(32px, 5vw, 96px))) !important;
+  margin: 0 auto !important;
+}
+
+.rack-sheet,
+.line-diagram-sheet {
+  border: 1px solid rgba(206, 226, 255, .96) !important;
+  border-radius: 14px !important;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .97), rgba(247, 250, 255, .92)) !important;
+  box-shadow: var(--catv-ref-shadow) !important;
+}
+
+.rack-sheet .floor-plan,
+.uploaded-floor-plan,
+.line-diagram-canvas,
+.pdf-line-diagram-canvas {
+  border: 1px solid #aecaef !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .9) !important;
+}
+
+.line-diagram-route,
+.diagram-legend {
+  color: #425170 !important;
+  font-weight: 700 !important;
+}
+
+.line-diagram-zoom-toolbar {
+  border: 1px solid #b6cef5 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .76) !important;
+}
+
+.line-diagram-zoom-toolbar button {
+  border: 1px solid #9cbcf1 !important;
+  color: #004fc9 !important;
+  background: rgba(255, 255, 255, .78) !important;
+  font-weight: 950 !important;
+}
+
+@media (max-width: 900px) {
+  .topbar,
+  #userView > .topbar,
+  #rackView > .topbar,
+  #adminView > .topbar,
+  .query-panel,
+  .network-sheet,
+  .network-sheet:has(.kt-field-screen),
+  .rack-page {
+    width: calc(100% - 28px) !important;
+  }
+
+  .split-query-panel {
+    grid-template-columns: 1fr !important;
+  }
+
+  .query-card {
+    grid-template-columns: 1fr !important;
+  }
+
+  .query-card .primary-btn {
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 540px) {
+  html,
+  body,
+  .app-shell,
+  .login-view {
+    overflow-x: hidden !important;
+  }
+
+  .login-view {
+    padding: 18px 14px !important;
+  }
+
+  .login-card {
+    width: 100% !important;
+    padding: 28px 22px !important;
+  }
+
+  .login-card::before {
+    width: 82px !important;
+    height: 82px !important;
+  }
+
+  .login-card h2::before {
+    font-size: 27px !important;
+    white-space: normal !important;
+  }
+
+  .topbar,
+  #userView > .topbar,
+  #rackView > .topbar,
+  #adminView > .topbar {
+    position: sticky !important;
+    top: 8px !important;
+    flex-wrap: wrap !important;
+    min-height: 74px !important;
+    padding: 12px 14px !important;
+    border-radius: 12px !important;
+  }
+
+  .topbar > div:first-child::before {
+    width: 42px !important;
+    height: 42px !important;
+  }
+
+  .topbar strong,
+  #userView > .topbar strong,
+  #rackView > .topbar strong,
+  #adminView > .topbar strong {
+    font-size: 22px !important;
+  }
+
+  .topbar span,
+  #userView > .topbar span,
+  #rackView > .topbar span,
+  #adminView > .topbar span {
+    font-size: 13px !important;
+  }
+
+  .topbar .ghost-btn,
+  #userView > .topbar .ghost-btn,
+  #rackView > .topbar .ghost-btn,
+  #adminView > .topbar .ghost-btn,
+  .topbar-back-btn {
+    min-height: 40px !important;
+    padding: 0 12px !important;
+    font-size: 13px !important;
+  }
+
+  .query-panel,
+  .network-sheet,
+  .network-sheet:has(.kt-field-screen),
+  .rack-page {
+    width: calc(100% - 20px) !important;
+    padding: 16px !important;
+  }
+
+  .query-card {
+    padding: 16px !important;
+  }
+
+  .query-card input,
+  .query-card .primary-btn {
+    min-height: 52px !important;
+    font-size: 16px !important;
+  }
+
+  .kt-basic-row,
+  .kt-basic-address-row,
+  .kt-field-screen .field-circuit-table > div,
+  .kt-field-screen .cell-circuit-table > div,
+  .kt-field-screen .b2c-circuit-table > div,
+  .kt-field-screen .cell-device-table > div {
+    min-width: 0 !important;
+  }
+}
+
+/* CATV login/search reference tuning - final position. */
+html,
+body {
+  background-image:
+    radial-gradient(circle at 89% 8%, rgba(42, 134, 255, .2), transparent 22rem),
+    radial-gradient(circle at 9% 84%, rgba(36, 132, 255, .18), transparent 24rem),
+    linear-gradient(135deg, rgba(2, 10, 33, .68), rgba(5, 20, 57, .58)),
+    url("assets/catv-network-bg.svg") !important;
+  background-size: 100% 100%, 100% 100%, 100% 100%, 100% 100% !important;
+  background-repeat: no-repeat !important;
+}
+
+body::after {
+  content: "" !important;
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: -1 !important;
+  pointer-events: none !important;
+  background:
+    radial-gradient(circle at 91% 10%, rgba(35, 130, 255, .18), transparent 17rem),
+    radial-gradient(circle at 8% 86%, rgba(35, 130, 255, .16), transparent 19rem) !important;
+}
+
+.login-card,
+.query-panel,
+.network-sheet,
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .86), rgba(232, 240, 252, .72)) !important;
+  border: 1px solid rgba(221, 236, 255, .96) !important;
+  box-shadow:
+    0 0 0 1px rgba(169, 203, 255, .9),
+    0 0 30px rgba(93, 166, 255, .28),
+    0 22px 54px rgba(0, 22, 75, .56),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  backdrop-filter: blur(20px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.15) !important;
+}
+
+#userView > .topbar > div:first-child {
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#userView > .topbar strong {
+  white-space: nowrap !important;
+}
+
+#userView > .topbar > div:first-child::before {
+  width: 58px !important;
+  height: 58px !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 180'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='35' y1='8' x2='190' y2='165' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%236bd1ff'/%3E%3Cstop offset='.46' stop-color='%230b76ff'/%3E%3Cstop offset='1' stop-color='%23004be8'/%3E%3C/linearGradient%3E%3Cfilter id='s' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeDropShadow dx='0' dy='8' stdDeviation='6' flood-color='%23003fae' flood-opacity='.35'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='%23035cff' stroke-width='8' stroke-linecap='round' stroke-linejoin='round' opacity='.9'%3E%3Cpath d='M110 28 43 66v76l67 38 67-38V66z'/%3E%3Cpath d='M43 66l67 38 67-38M110 104v76'/%3E%3C/g%3E%3Cg filter='url(%23s)' stroke='%239ed8ff' stroke-width='4' stroke-linejoin='round'%3E%3Cpath d='M110 4 137 19v31l-27 16-27-16V19z' fill='url(%23g)'/%3E%3Cpath d='M46 91 73 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3Cpath d='M174 91 201 106v31l-27 16-27-16v-31z' fill='url(%23g)'/%3E%3C/g%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+#userView > .topbar strong::after {
+  content: " 전송망 통합 조회" !important;
+}
+
+#userView > .topbar span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  white-space: nowrap !important;
+}
+
+#userView > .topbar span::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 1px !important;
+  height: 34px !important;
+  background: rgba(6, 25, 70, .24) !important;
+}
+
+
+.query-card {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(238, 246, 255, .52)) !important;
+  border-color: rgba(200, 220, 250, .86) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .8),
+    0 12px 28px rgba(1, 28, 82, .12) !important;
+}
+
+.query-card input,
+.login-card input {
+  background: rgba(255, 255, 255, .68) !important;
+  border-color: rgba(151, 184, 230, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+
+.empty-state {
+  gap: 28px !important;
+  align-content: center !important;
+}
+
+.empty-state::before {
+  content: "" !important;
+  width: clamp(126px, 11vw, 176px) !important;
+  height: clamp(126px, 11vw, 176px) !important;
+  margin: 0 !important;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'%3E%3Cdefs%3E%3ClinearGradient id='w' x1='44' y1='30' x2='176' y2='188' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%238cc6ff'/%3E%3Cstop offset='1' stop-color='%230b5cff'/%3E%3C/linearGradient%3E%3Cfilter id='d' x='-40%25' y='-40%25' width='180%25' height='180%25'%3E%3CfeDropShadow dx='0' dy='12' stdDeviation='10' flood-color='%23003eac' flood-opacity='.25'/%3E%3C/filter%3E%3C/defs%3E%3Cg fill='none' stroke='url(%23w)' stroke-width='18' stroke-linecap='round' filter='url(%23d)'%3E%3Cpath d='M42 86c39-34 97-34 136 0'/%3E%3Cpath d='M68 118c25-22 59-22 84 0'/%3E%3Cpath d='M92 149c11-10 25-10 36 0'/%3E%3C/g%3E%3Ccircle cx='110' cy='176' r='19' fill='url(%23w)' filter='url(%23d)'/%3E%3C/svg%3E") center / contain no-repeat !important;
+  text-shadow: none !important;
+  filter: drop-shadow(0 16px 18px rgba(0, 62, 172, .2)) !important;
+}
+
+@media (max-width: 720px) {
+  #userView > .topbar strong::after {
+    content: "" !important;
+  }
+
+  #userView > .topbar span::before {
+    height: 24px !important;
+  }
+}
+
+/* CATV login/search reference tuning - absolute EOF override. */
+html,
+body {
+  background-color: #020b20 !important;
+  background-image:
+    linear-gradient(135deg, rgba(2, 10, 33, .14), rgba(5, 20, 57, .1)),
+    url("assets/catv-network-bg.jpg") !important;
+  background-size: 100% 100%, 100% 100% !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+.login-card,
+.query-panel,
+.network-sheet,
+.topbar,
+#userView > .topbar,
+#rackView > .topbar,
+#adminView > .topbar {
+  background: linear-gradient(145deg, rgba(255, 255, 255, .86), rgba(232, 240, 252, .72)) !important;
+  border: 1px solid rgba(221, 236, 255, .96) !important;
+  box-shadow:
+    0 0 0 1px rgba(169, 203, 255, .9),
+    0 0 30px rgba(93, 166, 255, .28),
+    0 22px 54px rgba(0, 22, 75, .56),
+    inset 0 1px 0 rgba(255, 255, 255, .95) !important;
+  backdrop-filter: blur(20px) saturate(1.15) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(1.15) !important;
+}
+
+#userView > .topbar > div:first-child {
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#userView > .topbar strong {
+  white-space: nowrap !important;
+}
+
+#userView > .topbar strong::after {
+  content: " \C804\C1A1\B9DD  \D1B5\D569  \C870\D68C" !important;
+}
+
+#userView > .topbar span {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 18px !important;
+  white-space: nowrap !important;
+}
+
+#userView > .topbar span::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 1px !important;
+  height: 34px !important;
+  background: rgba(6, 25, 70, .24) !important;
+}
+
+#logoutBtn::before,
+#rackLogoutBtn::before,
+#adminLogoutBtn::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 20px !important;
+  height: 20px !important;
+  margin-right: 10px !important;
+  vertical-align: -4px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300307a' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4'/%3E%3Cpath d='M16 17l5-5-5-5'/%3E%3Cpath d='M21 12H9'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.query-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, .7), rgba(238, 246, 255, .52)) !important;
+  border-color: rgba(200, 220, 250, .86) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .8),
+    0 12px 28px rgba(1, 28, 82, .12) !important;
+}
+
+.query-card input,
+.login-card input {
+  background: rgba(255, 255, 255, .68) !important;
+  border-color: rgba(151, 184, 230, .72) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .9) !important;
+}
+
+.empty-state::before {
+  filter: drop-shadow(0 16px 18px rgba(0, 62, 172, .2)) !important;
+}
+
+@media (max-width: 720px) {
+  html,
+  body {
+    background-image:
+      linear-gradient(135deg, rgba(2, 10, 33, .18), rgba(5, 20, 57, .12)),
+      url("assets/catv-network-bg.jpg") !important;
+    background-size: 100% 100%, 100% 100% !important;
+  }
+
+  #userView > .topbar strong::after {
+    content: "" !important;
+  }
+}
+
+/* CATV result-page final override - true EOF. */
+body[data-view="loginView"] #userView,
+body[data-view="loginView"] #rackView,
+body[data-view="loginView"] #adminView,
+body[data-view="userView"] #loginView,
+body[data-view="userView"] #rackView,
+body[data-view="userView"] #adminView,
+body[data-view="rackView"] #loginView,
+body[data-view="rackView"] #userView,
+body[data-view="rackView"] #adminView,
+body[data-view="adminView"] #loginView,
+body[data-view="adminView"] #userView,
+body[data-view="adminView"] #rackView,
+.app-shell > section[hidden] {
+  display: none !important;
+}
+
+.app-shell > section.active-view {
+  display: block !important;
+}
+
+#loginView.active-view {
+  display: grid !important;
+}
+
+#userView[data-page="search"] > .topbar .topbar-back-btn,
+#userView[data-page="search"] #searchBackBtn {
+  display: none !important;
+}
+
+#userView[data-page="search"] > .query-panel {
+  display: grid !important;
+}
+
+#userView[data-page="result"] > .query-panel {
+  display: none !important;
+}
+
+#userView[data-page="result"] > .topbar {
+  width: min(1760px, calc(100vw - 88px)) !important;
+  min-height: 98px !important;
+  margin: 30px auto 24px !important;
+  padding: 18px 28px !important;
+  border-radius: 10px !important;
+}
+
+#userView[data-page="result"] > .topbar > div:last-child {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 24px !important;
+  margin-left: auto !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+#userView[data-page="result"] #searchBackBtn,
+#userView[data-page="result"] #logoutBtn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  width: auto !important;
+  min-width: 156px !important;
+  min-height: 52px !important;
+  padding: 0 28px !important;
+  border: 1px solid rgba(76, 120, 196, .62) !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .46) !important;
+  color: #00245f !important;
+  box-shadow: none !important;
+  font-size: 19px !important;
+  font-weight: 800 !important;
+}
+
+#userView[data-page="result"] #searchBackBtn {
+  font-size: 19px !important;
+}
+
+#userView[data-page="result"] #searchBackBtn::before {
+  content: "\2190" !important;
+  font-size: 25px !important;
+  line-height: 1 !important;
+}
+
+#userView[data-page="result"] #searchBackBtn::after {
+  content: none !important;
+}
+
+#userView[data-page="result"] .network-sheet {
+  width: min(1640px, calc(100vw - 168px)) !important;
+  max-width: min(1640px, calc(100vw - 168px)) !important;
+  margin: 0 auto 40px !important;
+  padding: 36px 42px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(246, 249, 255, .91)) !important;
+  border: 1px solid rgba(182, 207, 245, .9) !important;
+  box-shadow: 0 0 0 1px rgba(226, 239, 255, .98), 0 0 22px rgba(79, 148, 255, .34), 0 18px 40px rgba(0, 16, 60, .36) !important;
+}
+
+.kt-basic-card h2,
+.kt-info-card h2,
+.kt-hfc-panel h2,
+.remarks-card h3 {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin: 0 0 22px !important;
+  color: #001d55 !important;
+  font-size: clamp(28px, 2vw, 34px) !important;
+  font-weight: 900 !important;
+}
+
+.kt-basic-card h2::before {
+  content: "" !important;
+  width: 38px !important;
+  height: 38px !important;
+  flex: 0 0 38px !important;
+  background: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M24 4L42 14V34L24 44L6 34V14L24 4Z' stroke='%230057ff' stroke-width='3'/%3E%3Cpath d='M24 4V24M24 24V44M6 14L24 24L42 14M6 34L24 24L42 34M15 19L33 29M33 19L15 29' stroke='%23057dff' stroke-width='2'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+.kt-info-card h2::before,
+.kt-hfc-panel h2::before,
+.remarks-card h3::before {
+  content: "" !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
+  border-radius: 50% !important;
+  background: radial-gradient(circle at 35% 30%, #65d8ff, #006cff 62%, #0050c9) !important;
+  box-shadow: 0 0 12px rgba(0, 110, 255, .65) !important;
+}
+
+.kt-tabs .active::before,
+.kt-device-head strong::before,
+.kt-device-table-title::before {
+  content: "" !important;
+  display: inline-block !important;
+  width: 7px !important;
+  height: 22px !important;
+  margin-right: 12px !important;
+  border-radius: 4px !important;
+  background: linear-gradient(180deg, #169aff, #004fff) !important;
+  vertical-align: -4px !important;
+}
+
+.field-table-head span,
+.kt-line-table thead th {
+  background: linear-gradient(180deg, #096dff 0%, #0052df 100%) !important;
+  color: #fff !important;
+  border-color: rgba(161, 197, 255, .48) !important;
+  font-weight: 900 !important;
+}
+
+.kt-field-screen .field-table .field-table-head span,
+.kt-field-screen .field-table-head span {
+  background: linear-gradient(180deg, #096dff 0%, #0052df 100%) !important;
+  color: #fff !important;
+  border-color: rgba(161, 197, 255, .48) !important;
+  font-weight: 900 !important;
+}
+
+.field-table-grid,
+.kt-line-table,
+.kt-basic-table,
+.kt-device-table {
+  border: 1px solid rgba(163, 196, 244, .82) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
+}
+
+.field-table-row span,
+.kt-line-table tbody td,
+.kt-basic-table td,
+.kt-basic-table th,
+.kt-device-table td,
+.kt-device-table th {
+  border-color: rgba(188, 209, 238, .88) !important;
+  color: #001e5b !important;
+  font-weight: 700 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn,
+.kt-save-btn {
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, #ff661d 0%, #ff3408 100%) !important;
+  color: #fff !important;
+  box-shadow: 0 12px 22px rgba(255, 57, 8, .26) !important;
+  font-weight: 900 !important;
+}
+
+.kt-diagram-btn.field-line-diagram-btn {
+  min-width: 196px !important;
+  min-height: 54px !important;
+  font-size: 21px !important;
+}
+
+.kt-tabs::before,
+.kt-tabs .active::before,
+.kt-diagram-btn.field-line-diagram-btn::before {
+  content: none !important;
+  display: none !important;
+}
+
+.cell-link-button {
+  min-width: 92px !important;
+  height: 40px !important;
+  border: 1px solid #ff4b25 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .85) !important;
+  color: #ff3811 !important;
+  box-shadow: none !important;
+  font-weight: 900 !important;
+}
+
+.kt-hfc-panel,
+.remarks-card {
+  width: min(1240px, 100%) !important;
+  margin: 18px auto 0 !important;
+  padding: 28px !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .96), rgba(247, 250, 255, .91)) !important;
+  border: 1px solid rgba(177, 203, 242, .88) !important;
+  box-shadow: 0 0 0 1px rgba(226, 239, 255, .95), 0 0 18px rgba(79, 148, 255, .24), 0 14px 28px rgba(0, 22, 70, .18) !important;
+}
+
+.kt-hfc-device {
+  border: 1px solid rgba(172, 200, 242, .86) !important;
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, .62) !important;
+  padding: 22px !important;
+}
+
+.kt-device-head strong {
+  color: #001e5b !important;
+  font-size: 26px !important;
+  font-weight: 900 !important;
+}
+
+.field-action {
+  min-width: 148px !important;
+  min-height: 48px !important;
+  border: 1px solid #ff4b25 !important;
+  border-radius: 8px !important;
+  background: rgba(255, 255, 255, .9) !important;
+  color: #ff3811 !important;
+  box-shadow: none !important;
+  font-size: 20px !important;
+  font-weight: 900 !important;
+}
+
+.field-action span {
+  display: none !important;
+}
+
+.field-action::before {
+  content: "" !important;
+  width: 24px !important;
+  height: 24px !important;
+  margin-right: 10px !important;
+  display: inline-block !important;
+  vertical-align: -5px !important;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ff3811' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14.5 4l1.2 2H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4.3l1.2-2h5z'/%3E%3Ccircle cx='12' cy='13' r='3.5'/%3E%3C/svg%3E") center / contain no-repeat !important;
+}
+
+@media (max-width: 900px) {
+  #userView[data-page="result"] > .topbar,
+  #userView[data-page="result"] .network-sheet {
+    width: calc(100vw - 24px) !important;
+    max-width: calc(100vw - 24px) !important;
+  }
+
+  #userView[data-page="result"] > .topbar {
+    min-height: auto !important;
+    margin: 12px auto 14px !important;
+    padding: 12px !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:last-child {
+    width: 100% !important;
+    justify-content: space-between !important;
+    gap: 10px !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn,
+  #userView[data-page="result"] #logoutBtn {
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+    min-height: 44px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+  }
+
+  #userView[data-page="result"] .network-sheet {
+    padding: 18px 14px !important;
+    margin-bottom: 24px !important;
+  }
+
+  .kt-basic-card h2,
+  .kt-info-card h2,
+  .kt-hfc-panel h2,
+  .remarks-card h3 {
+    font-size: 22px !important;
+  }
+}
+
+/* CATV rack floor-plan page final override. */
+#rackView > .topbar > div:first-child::before {
+  content: none !important;
+  display: none !important;
+}
+
+#rackView > .topbar > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+  gap: 20px !important;
+}
+
+#rackView .topbar-symbol {
+  display: block !important;
+  flex: 0 0 auto !important;
+  width: 58px !important;
+  height: 58px !important;
+  object-fit: contain !important;
+  filter: drop-shadow(0 8px 14px rgba(0, 94, 255, .26)) !important;
+}
+
+#rackView .rack-diagram-sheet > .diagram-legend {
+  display: none !important;
+}
+
+#rackView .rack-heading > div > span,
+#rackView .rack-plan-label {
+  color: #006dff !important;
+  font-weight: 900 !important;
+}
+
+/* CATV result page final desktop shrink: keep mobile width, reduce web result sheet by about 10%. */
+@media (min-width: 901px) {
+  #userView[data-page="result"] .network-sheet,
+  #userView:has(#resultPanel .kt-field-screen)[data-page="result"] .network-sheet,
+  #userView[data-page="result"] .network-sheet:has(.kt-field-screen) {
+    width: min(1476px, calc(100vw - 300px)) !important;
+    max-width: min(1476px, calc(100vw - 300px)) !important;
+    padding: 32px 38px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+  }
+}
+
+/* Field-first mobile result layout.
+   Keep this block last so phone layouts cannot inherit fixed desktop columns. */
+@media (max-width: 600px) {
+  html {
+    -webkit-text-size-adjust: 100% !important;
+    text-size-adjust: 100% !important;
+  }
+
+  #userView[data-page="result"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow-x: clip !important;
+  }
+
+  #userView[data-page="result"] > .topbar {
+    position: sticky !important;
+    top: max(6px, env(safe-area-inset-top)) !important;
+    z-index: 30 !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    gap: 10px !important;
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    min-height: 0 !important;
+    margin: 8px auto 10px !important;
+    padding: 12px !important;
+    border-radius: 16px !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:first-child {
+    grid-column: 1 / -1 !important;
+    display: grid !important;
+    grid-template-columns: 44px auto minmax(0, 1fr) !important;
+    align-items: center !important;
+    gap: 10px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:first-child::before {
+    width: 44px !important;
+    height: 44px !important;
+    margin: 0 !important;
+  }
+
+  #userView[data-page="result"] > .topbar strong {
+    display: block !important;
+    min-width: 0 !important;
+    font-size: 23px !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+  }
+
+  #userView[data-page="result"] > .topbar strong::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  #userView[data-page="result"] > .topbar span {
+    display: block !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    color: #082760 !important;
+    font-size: 14px !important;
+    font-weight: 850 !important;
+    line-height: 1.25 !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn,
+  #userView[data-page="result"] #logoutBtn {
+    position: static !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 48px !important;
+    margin: 0 !important;
+    padding: 0 8px !important;
+    writing-mode: horizontal-tb !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    overflow-wrap: normal !important;
+    font-size: 14px !important;
+    line-height: 1 !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn {
+    grid-column: 1 !important;
+  }
+
+  #userView[data-page="result"] #logoutBtn {
+    grid-column: 2 !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn::before {
+    content: "\2190" !important;
+    display: inline-block !important;
+    font-size: 20px !important;
+    line-height: 1 !important;
+  }
+
+  #userView[data-page="result"] #searchBackBtn::after {
+    content: none !important;
+    display: none !important;
+  }
+
+  #userView[data-page="result"] .network-sheet,
+  #userView[data-page="result"] .network-sheet:has(.kt-field-screen) {
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+    margin: 0 auto max(20px, env(safe-area-inset-bottom)) !important;
+    padding: 10px !important;
+    overflow: hidden !important;
+    border-radius: 16px !important;
+  }
+
+  .kt-field-screen.field-record-sheet {
+    width: 100% !important;
+    max-width: 100% !important;
+    gap: 12px !important;
+    min-width: 0 !important;
+  }
+
+  .kt-field-screen .kt-info-card,
+  .kt-field-screen .kt-basic-card,
+  .kt-field-screen .kt-station-card,
+  .kt-field-screen .kt-hfc-card,
+  .kt-field-screen .kt-remarks-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding: 14px !important;
+    overflow: hidden !important;
+    border-radius: 14px !important;
+  }
+
+  .kt-basic-card h2,
+  .kt-info-card h2,
+  .kt-hfc-panel h2,
+  .remarks-card h3 {
+    gap: 10px !important;
+    margin: 0 0 14px !important;
+    padding: 0 !important;
+    font-size: 22px !important;
+    line-height: 1.25 !important;
+    word-break: keep-all !important;
+  }
+
+  .kt-basic-card h2::before,
+  .kt-info-card h2::before,
+  .kt-field-screen h2::before {
+    width: 12px !important;
+    height: 12px !important;
+    flex: 0 0 12px !important;
+  }
+
+  .kt-basic-table {
+    width: 100% !important;
+    min-width: 0 !important;
+    border-radius: 10px !important;
+  }
+
+  .kt-basic-row,
+  .kt-basic-main-row,
+  .kt-basic-address-row {
+    display: grid !important;
+    grid-template-columns: 76px minmax(0, 1fr) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .kt-basic-label,
+  .kt-basic-value {
+    display: flex !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    min-height: 48px !important;
+    padding: 9px 10px !important;
+    font-size: 15px !important;
+    line-height: 1.35 !important;
+    word-break: keep-all !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .kt-basic-label {
+    justify-content: center !important;
+    padding-inline: 5px !important;
+    border-left: 0 !important;
+    border-top: 1px solid rgba(188, 209, 238, .88) !important;
+    white-space: nowrap !important;
+  }
+
+  .kt-basic-main-row .kt-basic-label:first-child {
+    border-top: 0 !important;
+  }
+
+  .kt-basic-title {
+    font-size: 16px !important;
+    white-space: nowrap !important;
+  }
+
+  .kt-station-label {
+    border-left: 0 !important;
+  }
+
+  .kt-station-card {
+    display: flex !important;
+    flex-direction: column !important;
+    padding-top: 14px !important;
+  }
+
+  .kt-station-card > h2 {
+    order: 1 !important;
+  }
+
+  .kt-station-card > .kt-diagram-btn {
+    order: 2 !important;
+  }
+
+  .kt-station-card > .kt-tabs {
+    order: 3 !important;
+  }
+
+  .kt-station-card > .field-circuit-table {
+    order: 4 !important;
+  }
+
+  .kt-station-card > .kt-device-table-title {
+    order: 5 !important;
+  }
+
+  .kt-station-card > .cell-device-table {
+    order: 6 !important;
+  }
+
+  .kt-station-card .kt-diagram-btn.field-line-diagram-btn {
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 50px !important;
+    margin: 0 0 16px !important;
+    padding: 0 16px !important;
+    font-size: 18px !important;
+    line-height: 1 !important;
+  }
+
+  .kt-tabs,
+  .kt-device-table-title {
+    min-width: 0 !important;
+    margin: 0 0 10px !important;
+    font-size: 17px !important;
+    line-height: 1.3 !important;
+    word-break: keep-all !important;
+  }
+
+  .kt-field-screen .field-circuit-table,
+  .kt-field-screen .cell-circuit-table,
+  .kt-field-screen .b2c-circuit-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 0 18px !important;
+    overflow: hidden !important;
+  }
+
+  .kt-field-screen .field-circuit-table > .field-table-head,
+  .kt-field-screen .cell-device-table > .field-table-head {
+    display: none !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head),
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head),
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) {
+    display: grid !important;
+    grid-template-columns: 68px minmax(0, 1fr) 64px !important;
+    grid-template-areas:
+      "item node action"
+      "item line action" !important;
+    min-width: 0 !important;
+    min-height: 88px !important;
+    border-bottom: 1px solid rgba(188, 209, 238, .88) !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head):last-child,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head):last-child,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head):last-child {
+    border-bottom: 0 !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span {
+    min-width: 0 !important;
+    min-height: 44px !important;
+    padding: 7px 8px !important;
+    border: 0 !important;
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+    overflow-wrap: anywhere !important;
+    word-break: keep-all !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(1),
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(1),
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(1) {
+    grid-area: item !important;
+    justify-content: center !important;
+    text-align: center !important;
+    background: #edf5ff !important;
+    border-right: 1px solid rgba(188, 209, 238, .88) !important;
+    font-weight: 900 !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(2),
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(2),
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(2) {
+    grid-area: node !important;
+    border-bottom: 1px solid rgba(208, 222, 243, .8) !important;
+    font-weight: 750 !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(3),
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(3),
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(3) {
+    grid-area: line !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before {
+    display: block !important;
+    flex: 0 0 auto !important;
+    width: 38px !important;
+    margin-right: 6px !important;
+    color: #557099 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(2)::before {
+    content: "노드" !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > span:nth-child(3)::before {
+    content: "선번" !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head) > button,
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head) > button,
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) > button {
+    grid-area: action !important;
+    align-self: center !important;
+    justify-self: center !important;
+    width: 54px !important;
+    min-width: 54px !important;
+    max-width: 54px !important;
+    min-height: 48px !important;
+    height: 48px !important;
+    padding: 0 !important;
+    font-size: 14px !important;
+  }
+
+  .kt-field-screen .cell-device-table {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-areas:
+      "item model model"
+      "rack shelf port"
+      "action action action" !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    border-bottom: 1px solid rgba(188, 209, 238, .88) !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head):last-child {
+    border-bottom: 0 !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span {
+    display: block !important;
+    min-width: 0 !important;
+    min-height: 48px !important;
+    padding: 7px 8px !important;
+    border: 0 !important;
+    border-bottom: 1px solid rgba(208, 222, 243, .8) !important;
+    border-right: 1px solid rgba(208, 222, 243, .8) !important;
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+    overflow-wrap: anywhere !important;
+    word-break: keep-all !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(1) {
+    grid-area: item !important;
+    background: #edf5ff !important;
+    font-weight: 900 !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(2) {
+    grid-area: rack !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(3) {
+    grid-area: shelf !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(4) {
+    grid-area: port !important;
+    border-right: 0 !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(5) {
+    grid-area: model !important;
+    border-right: 0 !important;
+    font-weight: 750 !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(2)::before,
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(3)::before,
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(4)::before,
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(5)::before {
+    display: block !important;
+    margin-bottom: 3px !important;
+    color: #557099 !important;
+    font-size: 11px !important;
+    font-weight: 800 !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(2)::before {
+    content: "랙" !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(3)::before {
+    content: "쉘프" !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(4)::before {
+    content: "포트" !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > span:nth-child(5)::before {
+    content: "모델" !important;
+  }
+
+  .kt-field-screen .cell-device-table > div:not(.field-table-head) > button {
+    grid-area: action !important;
+    width: calc(100% - 16px) !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 44px !important;
+    height: 44px !important;
+    margin: 8px !important;
+    padding: 0 12px !important;
+    font-size: 14px !important;
+  }
+
+  .kt-hfc-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+    gap: 12px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .kt-hfc-device {
+    min-width: 0 !important;
+    padding: 12px !important;
+  }
+
+  .kt-device-head {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+    align-items: center !important;
+    gap: 10px !important;
+  }
+
+  .kt-device-head strong {
+    min-width: 0 !important;
+    font-size: 18px !important;
+  }
+
+  .kt-device-head .field-action {
+    min-width: 112px !important;
+    min-height: 44px !important;
+    padding: 0 10px !important;
+    font-size: 14px !important;
+    white-space: nowrap !important;
+  }
+
+  .kt-device-info-table .kt-device-info-row,
+  .kt-device-info-table .kt-device-location-row {
+    display: grid !important;
+    grid-template-columns: 72px minmax(0, 1fr) !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .kt-device-info-table .kt-device-label,
+  .kt-device-info-table .kt-device-value {
+    min-width: 0 !important;
+    min-height: 44px !important;
+    padding: 7px 8px !important;
+    font-size: 14px !important;
+    line-height: 1.3 !important;
+    word-break: keep-all !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .kt-device-info-table .kt-device-label {
+    white-space: nowrap !important;
+  }
+
+  .kt-field-screen .remarks-editor,
+  .kt-field-screen .remarks-editor textarea {
+    min-height: 170px !important;
+  }
+
+  .kt-field-screen .remarks-editor textarea {
+    padding: 12px 12px 66px !important;
+    font-size: 16px !important;
+  }
+
+  .remarks-footer {
+    right: 8px !important;
+    bottom: 8px !important;
+    gap: 10px !important;
+  }
+
+  .kt-save-btn {
+    width: 88px !important;
+    min-height: 46px !important;
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 380px) {
+  #userView[data-page="result"] > .topbar {
+    padding: 10px !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:first-child {
+    grid-template-columns: 40px auto minmax(0, 1fr) !important;
+    gap: 8px !important;
+  }
+
+  #userView[data-page="result"] > .topbar > div:first-child::before {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  #userView[data-page="result"] > .topbar strong {
+    font-size: 21px !important;
+  }
+
+  #userView[data-page="result"] > .topbar span,
+  #userView[data-page="result"] #searchBackBtn,
+  #userView[data-page="result"] #logoutBtn {
+    font-size: 13px !important;
+  }
+
+  .kt-field-screen .kt-info-card,
+  .kt-field-screen .kt-basic-card,
+  .kt-field-screen .kt-station-card,
+  .kt-field-screen .kt-hfc-card,
+  .kt-field-screen .kt-remarks-card {
+    padding: 12px !important;
+  }
+
+  .kt-field-screen .field-circuit-table > div:not(.field-table-head),
+  .kt-field-screen .cell-circuit-table > div:not(.field-table-head),
+  .kt-field-screen .b2c-circuit-table > div:not(.field-table-head) {
+    grid-template-columns: 62px minmax(0, 1fr) 60px !important;
   }
 }

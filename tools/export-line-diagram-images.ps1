@@ -1,6 +1,9 @@
 param(
   [Parameter(Mandatory = $true)][string]$InputPath,
-  [Parameter(Mandatory = $true)][string]$OutputDir
+  [Parameter(Mandatory = $true)][string]$OutputDir,
+  [ValidateSet("PNG", "PDF")][string]$OutputFormat = "PNG",
+  [switch]$IndexOnly,
+  [string]$JsonOutputPath = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -71,6 +74,19 @@ function Test-SearchNavyFill {
     -and $blue -ge ($green + 15)
 }
 
+function Test-SearchableShapeType {
+  param($Shape)
+  try {
+    $shapeType = [int]$Shape.Type
+    # AutoShape, Freeform and TextBox can contain the searchable CELL/B2C
+    # labels. Lines, connectors and pictures account for most diagram objects
+    # and can be skipped before making expensive Fill/TextFrame COM calls.
+    return $shapeType -eq 1 -or $shapeType -eq 5 -or $shapeType -eq 17
+  } catch {
+    return $false
+  }
+}
+
 function Add-NavyShapeEntry {
   param(
     $Shape,
@@ -93,6 +109,8 @@ function Add-NavyShapeEntry {
       return
     }
   } catch {}
+
+  if (-not (Test-SearchableShapeType $Shape)) { return }
 
   try {
     # TextFrame COM calls are expensive on large drawings. Read text only after
@@ -130,6 +148,8 @@ function Add-TextShapeEntry {
   } catch {
     return
   }
+
+  if (-not (Test-SearchableShapeType $Shape)) { return }
 
   try {
     $text = (Get-ShapeText $Shape).Trim()
@@ -252,10 +272,16 @@ try {
     }
   }
   $index = 0
+  $linebookToken = -join ([char]0xC120, [char]0xBC88, [char]0xC7A5)
+  $linebookTableToken = -join ([char]0xC120, [char]0xBC88, [char]0xD45C)
+  $circuitStatusToken = -join ([char]0xD68C, [char]0xC120, [char]0xD604, [char]0xD669)
 
   foreach ($sheet in $workbook.Worksheets) {
     $sheetName = [string]$sheet.Name
     if ($sheetName.Trim() -eq ">>") { continue }
+    if ($sheetName.Contains($linebookToken) `
+      -or $sheetName.Contains($linebookTableToken) `
+      -or $sheetName.Contains($circuitStatusToken)) { continue }
     if ($sheet.Shapes.Count -lt 1) { continue }
 
     $minLeft = [double]::PositiveInfinity
@@ -286,8 +312,9 @@ try {
     foreach ($shape in $sheet.Shapes) {
       Add-NavyShapeEntry -Shape $shape -Entries $navyEntries
     }
+    $blankNavyEntries = @($navyEntries | Where-Object { -not $_.text })
     $textEntries = @()
-    if ($isMapyeongWorkbook -or @($navyEntries | Where-Object { -not $_.text }).Count -gt 0) {
+    if ($blankNavyEntries.Count -gt 0) {
       $allTextEntries = New-Object System.Collections.ArrayList
       foreach ($shape in $sheet.Shapes) {
         Add-TextShapeEntry -Shape $shape -Entries $allTextEntries
@@ -322,7 +349,15 @@ try {
         height = (($visibleBottom - $visibleTop) / $boundsHeight) * 100
       }
     }
-    if ($isMapyeongWorkbook) {
+    $needsMapyeongExternalTextEntries = $isMapyeongWorkbook -and $searchTargets.Count -eq 0
+    if ($needsMapyeongExternalTextEntries -and $textEntries.Count -eq 0) {
+      $allTextEntries = New-Object System.Collections.ArrayList
+      foreach ($shape in $sheet.Shapes) {
+        Add-TextShapeEntry -Shape $shape -Entries $allTextEntries
+      }
+      $textEntries = @($allTextEntries)
+    }
+    if ($needsMapyeongExternalTextEntries) {
       foreach ($textEntry in $textEntries) {
         if ($textEntry.navy -or -not (Test-MapyeongSearchTextShape $textEntry)) { continue }
         $visibleLeft = [Math]::Max($exportLeft, [double]$textEntry.left)
@@ -342,14 +377,43 @@ try {
       }
     }
 
+    $index += 1
+    $extension = $OutputFormat.ToLowerInvariant()
+    $fileName = "sheet-$index.$extension"
+    $outputPath = Join-Path $OutputDir $fileName
+    if ($IndexOnly) {
+      $items += [pscustomobject]@{
+        sheetName = $sheetName
+        fileName = $fileName
+        widthPixels = [Math]::Round($boundsWidth)
+        heightPixels = [Math]::Round($boundsHeight)
+        imageFormat = $extension
+        searchTargets = $searchTargets
+      }
+      continue
+    }
+
+    if ($OutputFormat -eq "PDF") {
+      if (Test-Path -LiteralPath $outputPath) {
+        Remove-Item -LiteralPath $outputPath -Force
+      }
+      $sheet.ExportAsFixedFormat(0, $outputPath)
+      $items += [pscustomobject]@{
+        sheetName = $sheetName
+        fileName = $fileName
+        widthPixels = [Math]::Round($boundsWidth)
+        heightPixels = [Math]::Round($boundsHeight)
+        imageFormat = "pdf"
+        searchTargets = $searchTargets
+      }
+      continue
+    }
+
     $image = Copy-SheetPictureWithRetry -Sheet $sheet -Excel $excel
     if ($image -eq $null) {
       throw "Excel did not place an image on the clipboard for sheet '$sheetName'."
     }
 
-    $index += 1
-    $fileName = "sheet-$index.png"
-    $outputPath = Join-Path $OutputDir $fileName
     $flattened = New-Object System.Drawing.Bitmap($image.Width, $image.Height, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
     $graphics = [System.Drawing.Graphics]::FromImage($flattened)
     $graphics.Clear([System.Drawing.Color]::White)
@@ -362,6 +426,7 @@ try {
       fileName = $fileName
       widthPixels = $image.Width
       heightPixels = $image.Height
+      imageFormat = "png"
       searchTargets = $searchTargets
     }
 
@@ -369,7 +434,12 @@ try {
     $image.Dispose()
   }
 
-  $items | ConvertTo-Json -Depth 4 -Compress
+  $json = @($items) | ConvertTo-Json -Depth 8 -Compress
+  if ($JsonOutputPath) {
+    [System.IO.File]::WriteAllText($JsonOutputPath, $json, [System.Text.UTF8Encoding]::new($false))
+  } else {
+    $json
+  }
 } finally {
   if ($workbook) { $workbook.Close($false) | Out-Null }
   if ($excel) {

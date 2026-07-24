@@ -67,6 +67,7 @@ try {
   assert.equal(versionedHealth.status, 200);
   const versionedHealthPayload = await versionedHealth.json();
   assert.equal(versionedHealthPayload.apiVersion, "neon-r2-v2");
+  assert.equal(versionedHealthPayload.lineDiagramRendererVersion, "excel-picture-v8-exact-image-only");
   assert.equal(versionedHealthPayload.authConfigured, true);
   assert.equal(versionedHealthPayload.database, "file");
   assert.equal(versionedHealthPayload.photoStorage, "disabled");
@@ -74,6 +75,13 @@ try {
   assert.equal(versionedHealth.headers.get("x-content-type-options"), "nosniff");
   assert.equal(versionedHealth.headers.get("x-frame-options"), "DENY");
   assert.match(versionedHealth.headers.get("content-security-policy") || "", /frame-ancestors 'none'/);
+
+  const trustedRendererHealth = await fetch(`${baseUrl}/api/health`, {
+    headers: { origin: "https://transmission-webapp.vercel.app" },
+  });
+  assert.equal(trustedRendererHealth.status, 200);
+  assert.equal(trustedRendererHealth.headers.get("access-control-allow-origin"), "https://transmission-webapp.vercel.app");
+  assert.equal((await trustedRendererHealth.json()).lineDiagramRendererVersion, "excel-picture-v8-exact-image-only");
 
   const unauthenticatedAdmin = await fetch(`${baseUrl}/admin`, { redirect: "manual" });
   assert.equal(unauthenticatedAdmin.status, 302);
@@ -258,6 +266,30 @@ try {
 
   const protectedUpload = await fetch(`${baseUrl}/api/line-diagram-images`, { method: "POST", body: Buffer.alloc(0) });
   assert.equal(protectedUpload.status, 401);
+
+  const trustedRendererPreflight = await fetch(`${baseUrl}/api/line-diagram-images`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://transmission-webapp.vercel.app",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type,x-file-name",
+      "access-control-request-private-network": "true",
+    },
+  });
+  assert.equal(trustedRendererPreflight.status, 204);
+  assert.equal(trustedRendererPreflight.headers.get("access-control-allow-origin"), "https://transmission-webapp.vercel.app");
+  assert.equal(trustedRendererPreflight.headers.get("access-control-allow-private-network"), "true");
+  assert.match(trustedRendererPreflight.headers.get("access-control-allow-methods") || "", /GET, POST/);
+
+  const untrustedRendererPreflight = await fetch(`${baseUrl}/api/line-diagram-images`, {
+    method: "OPTIONS",
+    headers: {
+      origin: "https://example.com",
+      "access-control-request-method": "POST",
+    },
+  });
+  assert.notEqual(untrustedRendererPreflight.status, 204);
+  assert.equal(untrustedRendererPreflight.headers.get("access-control-allow-origin"), null);
 
   const logout = await fetch(`${baseUrl}/api/auth/logout`, { method: "POST", headers: { cookie } });
   assert.equal(logout.status, 200);

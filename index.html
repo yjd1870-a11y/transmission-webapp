@@ -3,11 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#075d5c">
-  <meta name="description" content="현장 스마트폰용 CATV 전송망 통합 조회 웹앱">
+  <meta name="theme-color" content="#0b5cff">
+  <meta name="description" content="현장 스마트폰 CATV 전송망 통합 조회 앱">
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CATV 조회">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/assets/catv-app-icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/assets/icons/icon-192.png">
   <title>CATV 전송망 조회</title>
-  <link rel="stylesheet" href="styles.css?v=CATV0720ADMINALIGN">
+  <script src="/local-redirect.js"></script>
+  <link rel="stylesheet" href="/styles.css?v=CATV0724REFUI17">
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous"></script>
 </head>
@@ -24,17 +31,23 @@
         <h2>로그인</h2>
         <label>
           <span>아이디</span>
-          <input id="loginId" autocomplete="username" required>
+          <input id="loginId" autocomplete="username" placeholder="아이디를 입력하세요" required>
         </label>
         <label>
           <span>비밀번호</span>
-          <input id="loginPassword" type="password" autocomplete="current-password" required>
+          <span class="password-field">
+            <input id="loginPassword" type="password" autocomplete="current-password" placeholder="비밀번호를 입력하세요" required>
+            <button id="togglePasswordBtn" class="password-toggle" type="button" aria-label="비밀번호 보기">보기</button>
+          </span>
         </label>
-        <button class="primary-btn" type="submit">접속</button>
+        <label class="remember-row">
+          <input id="rememberLoginId" type="checkbox">
+          <span>아이디 저장</span>
+        </label>
+        <button class="primary-btn" type="submit">로그인</button>
         <p id="loginMessage" class="message" role="alert"></p>
         <div class="account-hint">
-          <span>계정은 관리자가 발급합니다.</span>
-          <span>아이디와 발급받은 비밀번호를 입력하세요.</span>
+          <span>계정 관련 사항은 관리자에게 문의하세요.</span>
         </div>
       </form>
     </section>
@@ -43,9 +56,9 @@
       <header class="topbar">
         <div>
           <strong>CATV</strong>
-          <span>전송망 조회</span>
+          <span>CELL 및 전용선 조회</span>
         </div>
-        <button id="searchBackBtn" class="topbar-back-btn" type="button" aria-label="CELL 및 B2C 검색화면으로 이동"></button>
+        <button id="searchBackBtn" class="topbar-back-btn" type="button" aria-label="CELL 및 B2C 검색화면으로 이동">조회 화면으로</button>
         <button id="logoutBtn" class="ghost-btn" type="button">로그아웃</button>
       </header>
 
@@ -53,14 +66,14 @@
         <div class="query-card">
           <label>
             <span>CELL (셀명)</span>
-            <input id="cellSearch">
+            <input id="cellSearch" placeholder="셀명을 입력하세요">
           </label>
           <button id="cellSearchBtn" class="primary-btn" type="button">CELL 조회</button>
         </div>
         <div class="query-card">
           <label>
             <span>B2C (전용선 주소)</span>
-            <input id="b2cSearch">
+            <input id="b2cSearch" placeholder="전용선 주소를 입력하세요">
           </label>
           <button id="b2cSearchBtn" class="primary-btn" type="button">B2C 조회</button>
         </div>
@@ -72,6 +85,7 @@
     <section id="rackView" class="hidden">
       <header class="topbar">
         <div>
+          <img class="topbar-symbol" src="/assets/catv-topbar-symbol.png" alt="" aria-hidden="true">
           <strong>CATV</strong>
           <span>랙 위치</span>
         </div>
@@ -100,7 +114,7 @@
               <button id="addUserBtn" class="secondary-btn" type="button">계정 생성</button>
             </div>
           </div>
-          <p class="floor-plan-help">공개 회원가입은 사용하지 않습니다. 관리자가 아이디·비밀번호·권한을 지정하며 비밀번호는 화면이나 엑셀에 표시되지 않습니다.</p>
+          <p class="floor-plan-help">공개 회원가입은 사용하지 않습니다. 관리자가 아이디, 비밀번호, 권한을 지정합니다.</p>
           <p id="usersTableMessage" class="floor-plan-message admin-table-message" role="status"></p>
           <div class="table-wrap">
             <table id="usersTable"></table>
@@ -125,18 +139,24 @@
         </article>
 
         <article class="admin-panel floor-plan-admin">
-          <div class="panel-head"><h2>국사 평면도 DB</h2><button id="clearFloorPlansBtn" class="danger-btn" type="button">전체 삭제</button></div>
+          <div class="panel-head">
+            <h2>국사 평면도 DB</h2>
+            <button id="clearFloorPlansBtn" class="danger-btn" type="button">전체 삭제</button>
+          </div>
           <div class="floor-plan-form floor-plan-image-form">
-            <label>국사명 <input id="floorPlanStation" placeholder="예: 중앙국사"></label>
-            <label>평면도 파일 <input id="floorPlanFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp,.xlsx,.xls"><small>이미지 또는 기존 Excel 평면도 · 수정할 때 선택하지 않으면 기존 이미지 유지</small></label>
+            <label>국사명<input id="floorPlanStation" placeholder="예: 중앙국사"></label>
+            <label>평면도 파일
+              <input id="floorPlanFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp,.xlsx,.xls">
+              <small>현재 조회 화면은 JPG/PNG/WebP 이미지와 핀 좌표 방식을 사용합니다.</small>
+            </label>
             <button id="saveFloorPlanBtn" class="secondary-btn" type="button">등록 / 수정</button>
             <button id="cancelFloorPlanEditBtn" class="floor-plan-cancel-btn hidden" type="button">수정 취소</button>
           </div>
           <div id="floorPlanCoordinateEditor" class="floor-coordinate-editor hidden">
             <div class="floor-coordinate-toolbar">
-              <label>노드명 / 랙정보 <input id="floorPlanRackCoordinate" placeholder="예: 시내향 144C 또는 101"></label>
+              <label>노드명 / 랙 정보<input id="floorPlanRackCoordinate" placeholder="예: 시내향 144C 또는 101"></label>
               <button id="clearFloorPlanCoordinatesBtn" type="button">좌표 전체 삭제</button>
-              <span>노드명 또는 랙 정보를 입력한 뒤 이미지에서 해당 OFD 함·랙의 중앙을 클릭하세요.</span>
+              <span>노드명 또는 랙 정보를 입력한 뒤 이미지에서 해당 위치를 클릭하세요.</span>
             </div>
             <div id="floorPlanCoordinateStage" class="floor-coordinate-stage">
               <img id="floorPlanCoordinateImage" alt="평면도 좌표 지정 미리보기">
@@ -144,19 +164,22 @@
             </div>
             <div id="floorPlanCoordinateList" class="floor-coordinate-list"></div>
           </div>
-          <p class="floor-plan-help">목록의 수정 버튼으로 기존 이미지와 좌표를 불러올 수 있습니다. 좌표명을 선택한 뒤 이미지의 새 위치를 클릭하면 이동하며, 이미지가 잘못된 경우에만 새 파일을 선택하세요.</p>
+          <p class="floor-plan-help">목록의 수정 버튼으로 기존 이미지와 좌표를 불러올 수 있습니다.</p>
           <p id="floorPlanMessage" class="floor-plan-message" role="status"></p>
           <div id="floorPlansList" class="floor-plans-list"></div>
         </article>
 
         <article class="admin-panel b2c-admin">
-          <div class="panel-head"><h2>선번장(직선도) DB</h2><button id="clearB2CBtn" class="danger-btn" type="button">전체 삭제</button></div>
+          <div class="panel-head">
+            <h2>선번장 직선도 DB</h2>
+            <button id="clearB2CBtn" class="danger-btn" type="button">전체 삭제</button>
+          </div>
           <div class="floor-plan-form">
-            <label>국사명 <input id="b2cStation" placeholder="예: 안성국사"></label>
-            <label>B2C 엑셀 <input id="b2cFile" type="file" accept=".xlsx,.xls"></label>
+            <label>국사명<input id="b2cStation" placeholder="예: 안성국사"></label>
+            <label>직선도 엑셀 <input id="b2cFile" type="file" accept=".xlsx,.xls"></label>
             <button id="saveB2CBtn" class="secondary-btn" type="button">등록 / 수정</button>
           </div>
-          <p class="floor-plan-help">선번장의 G열 노드명과 같은 직선도 시트를 그림으로 저장합니다. 기본 국사는 남색 도형 안의 셀명/B2C를 검색하고, 마평국사는 도형 밖의 검은색 셀명과 보라색 B2C(전용선명)를 검색 DB로 사용합니다. 검색어는 공백·기호를 제외하고 6글자 연속 일치로 찾습니다.</p>
+          <p class="floor-plan-help">직선도는 등록된 엑셀/이미지 데이터를 지도처럼 확대, 축소하여 조회합니다.</p>
           <p id="b2cMessage" class="floor-plan-message" role="status"></p>
           <div id="b2cList" class="floor-plans-list"></div>
         </article>
@@ -166,11 +189,11 @@
           <div id="sharedDbSummary" class="shared-db-summary"></div>
           <div class="tool-row shared-db-actions">
             <button id="publishSharedDbBtn" class="secondary-btn" type="button">GitHub 공용 DB 게시</button>
-            <button id="saveSharedDbServerBtn" class="secondary-btn" type="button">현재 DB 로컬 적용</button>
+            <button id="saveSharedDbServerBtn" class="secondary-btn" type="button">서버 DB 지금 저장</button>
             <button id="downloadSharedDbBtn" class="secondary-btn" type="button">공용 DB 파일 저장</button>
             <button id="refreshSharedDbBtn" class="secondary-btn" type="button">공용 DB 새로고침</button>
           </div>
-          <p class="floor-plan-help">PC에서 DB 업로드 후 공용 DB를 게시하면 스마트폰에서도 같은 링크로 동일한 DB를 조회합니다.</p>
+          <p class="floor-plan-help">관리자가 등록·수정한 자료는 서버 DB에 자동 저장됩니다. 모바일은 새로고침하거나 앱을 다시 열면 최신 DB를 적용합니다.</p>
           <p id="sharedDbMessage" class="floor-plan-message" role="status"></p>
         </article>
       </section>
@@ -212,7 +235,7 @@
         <h2>비밀번호 재설정</h2>
         <button id="closePasswordResetDialogBtn" class="ghost-btn" type="button" aria-label="비밀번호 재설정 창 닫기">닫기</button>
       </div>
-      <p><strong id="passwordResetAccountId"></strong> 계정의 새 비밀번호를 관리자가 지정합니다.</p>
+      <p><strong id="passwordResetAccountId"></strong> 계정의 비밀번호를 관리자가 지정합니다.</p>
       <input id="passwordResetTarget" type="hidden">
       <label>새 비밀번호
         <input id="newAccountPassword" type="password" autocomplete="new-password" minlength="10" maxlength="128" required>
@@ -225,6 +248,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=CATV0722SHAREDDBNOAUTH2"></script>
+  <script src="/app.js?v=CATV0724FRESHLOGIN18"></script>
 </body>
 </html>

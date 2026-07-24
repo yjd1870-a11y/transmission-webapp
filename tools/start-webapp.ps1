@@ -1,10 +1,13 @@
 param(
   [int]$Port = 8000,
-  [switch]$NoOpen
+  [switch]$NoOpen,
+  [switch]$ForceRestart
 )
 
 $ErrorActionPreference = "Stop"
-$expectedApiVersion = "managed-auth-v1"
+$expectedApiVersion = "neon-r2-v2"
+$expectedRendererVersion = "excel-picture-v8-exact-image-only"
+$expectedStaticAssetVersion = "catv0724-reference-ui-v17"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $url = "http://127.0.0.1:$Port/"
 $healthUrl = "${url}api/health"
@@ -102,7 +105,12 @@ function Set-SessionMasterKey {
 
 Set-Location $projectRoot
 $health = Get-RatisHealth
-if ($health -and $health.apiVersion -eq $expectedApiVersion) {
+if (-not $ForceRestart `
+  -and $health `
+  -and $health.apiVersion -eq $expectedApiVersion `
+  -and $health.lineDiagramRendererVersion -eq $expectedRendererVersion `
+  -and $health.staticAssetVersion -eq $expectedStaticAssetVersion `
+  -and $health.authConfigured) {
   if (-not $NoOpen) { Start-Process $url }
   exit 0
 }
@@ -140,7 +148,11 @@ $serverProcess = [System.Diagnostics.Process]::Start($startInfo)
 for ($attempt = 0; $attempt -lt 40; $attempt += 1) {
   Start-Sleep -Milliseconds 250
   $health = Get-RatisHealth
-  if ($health -and $health.apiVersion -eq $expectedApiVersion) {
+  if ($health `
+    -and $health.apiVersion -eq $expectedApiVersion `
+    -and $health.lineDiagramRendererVersion -eq $expectedRendererVersion `
+    -and $health.staticAssetVersion -eq $expectedStaticAssetVersion `
+    -and $health.authConfigured) {
     if (-not $NoOpen) { Start-Process $url }
     exit 0
   }
