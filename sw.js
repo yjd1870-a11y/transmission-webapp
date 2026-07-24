@@ -1,4 +1,4 @@
-const CACHE_NAME = "catv-pwa-reference-ui-v17";
+const CACHE_NAME = "catv-pwa-reference-ui-v18";
 const APP_SHELL = [
   "/",
   "/index.html",
@@ -7,7 +7,6 @@ const APP_SHELL = [
   "/manifest.webmanifest",
   "/assets/catv-network-bg.svg",
   "/assets/catv-network-bg.jpg",
-  "/assets/catv-network-bg.png",
   "/assets/catv-app-icon.svg",
   "/assets/catv-topbar-symbol.png",
   "/assets/icons/icon-192.png",

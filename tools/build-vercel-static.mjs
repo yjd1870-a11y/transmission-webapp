@@ -14,7 +14,6 @@ for (const file of ["index.html", "local-redirect.js", "app.js", "styles.css", "
 const publicAssets = [
   "assets/catv-network-bg.svg",
   "assets/catv-network-bg.jpg",
-  "assets/catv-network-bg.png",
   "assets/catv-app-icon.svg",
   "assets/catv-topbar-symbol.png",
   "assets/icons/icon-192.png",
